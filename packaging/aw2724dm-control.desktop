@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=AW2724DM Monitor Control
+GenericName=Monitör Giriş Yöneticisi
+Comment=DDC/CI ile monitör girişini, parlaklığını ve kontrastını yönetin
+Exec=aw2724dm-control
+Icon=aw2724dm-control
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=monitor;display;DDC;input;brightness;contrast;
+StartupNotify=true
+X-GNOME-UsesNotifications=true

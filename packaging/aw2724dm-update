@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ARCHIVE_URL="https://github.com/cunay1/DELL_AW2724DM_MONITOR_DISPLAY_SWITCH/archive/refs/heads/main.tar.gz"
+
+if [[ ${EUID} -ne 0 ]]; then
+    echo "Bu yardımcı pkexec üzerinden root olarak çalıştırılmalıdır." >&2
+    exit 1
+fi
+
+CALLING_UID="${PKEXEC_UID:-}"
+if [[ -z ${CALLING_UID} || ! ${CALLING_UID} =~ ^[0-9]+$ ]]; then
+    echo "Güncellemeyi başlatan kullanıcı belirlenemedi." >&2
+    exit 1
+fi
+
+CALLING_USER="$(getent passwd "${CALLING_UID}" | cut -d: -f1)"
+if [[ -z ${CALLING_USER} || ${CALLING_USER} == root ]]; then
+    echo "Geçerli bir masaüstü kullanıcısı belirlenemedi." >&2
+    exit 1
+fi
+
+UPDATE_DIR="$(mktemp -d /tmp/aw2724dm-update.XXXXXXXX)"
+cleanup() {
+    rm -rf -- "${UPDATE_DIR}"
+}
+trap cleanup EXIT
+
+ARCHIVE="${UPDATE_DIR}/source.tar.gz"
+curl --fail --location --proto '=https' --tlsv1.2 --silent --show-error \
+    "${ARCHIVE_URL}" --output "${ARCHIVE}"
+
+while IFS= read -r member; do
+    if [[ ${member} == /* || ${member} == ../* || ${member} == *'/../'* ]]; then
+        echo "Güvensiz arşiv yolu reddedildi: ${member}" >&2
+        exit 1
+    fi
+done < <(tar -tzf "${ARCHIVE}")
+
+tar -xzf "${ARCHIVE}" --no-same-owner --no-same-permissions -C "${UPDATE_DIR}"
+SOURCE_DIR="$(find "${UPDATE_DIR}" -mindepth 1 -maxdepth 1 -type d -name 'DELL_AW2724DM_MONITOR_DISPLAY_SWITCH-*' -print -quit)"
+if [[ -z ${SOURCE_DIR} || ! -x ${SOURCE_DIR}/install.sh || ! -f ${SOURCE_DIR}/pyproject.toml ]]; then
+    echo "İndirilen güncelleme beklenen proje yapısına sahip değil." >&2
+    exit 1
+fi
+
+export SUDO_USER="${CALLING_USER}"
+export USER="${CALLING_USER}"
+bash "${SOURCE_DIR}/install.sh"
+echo "Güncelleme başarıyla uygulandı."

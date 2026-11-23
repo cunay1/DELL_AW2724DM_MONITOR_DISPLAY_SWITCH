@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aw2724dm-control"
+version = "1.1.0"
+description = "X11 GNOME için DDC/CI monitör giriş ve ayar yöneticisi"
+requires-python = ">=3.12"
+dependencies = ["PyQt6==6.12.1"]
+
+[project.scripts]
+aw2724dm-control-python = "aw2724dm_control.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

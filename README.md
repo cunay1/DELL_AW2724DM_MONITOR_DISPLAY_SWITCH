@@ -1,0 +1,293 @@
+# AW2724DM Monitor Control
+
+Dell Alienware AW2724DM ve DDC/CI destekli diğer monitörlerin giriş kaynağını,
+parlaklığını ve kontrastını Ubuntu 26.04 LTS GNOME **X11/Xorg** oturumunda yöneten
+PyQt6 uygulamasıdır. Donanımla `ddcutil` üzerinden konuşur; GUI, CLI, GNOME özel
+klavye kısayolları ve sistem tepsisi birlikte çalışır.
+
+Bu sürüm özellikle X11 hedeflidir. GUI, Wayland oturumunda bilinçli olarak başlamaz
+ve Qt `xcb` arka ucunu kullanır. CLI işlemleri grafik oturumuna ihtiyaç duymaz.
+
+## Proje yapısı
+
+```text
+.
+├── apt-requirements.txt
+├── install.sh
+├── packaging
+│   ├── 45-aw2724dm-control-i2c.rules
+│   ├── aw2724dm-update
+│   ├── aw2724dm-control-launcher
+│   ├── aw2724dm-control.desktop
+│   └── i2c-dev.conf
+├── pyproject.toml
+├── README.md
+├── requirements.txt
+├── src
+│   ├── assets
+│   │   └── aw2724dm-control.svg
+│   └── aw2724dm_control
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── config.py
+│       ├── ddc.py
+│       ├── gnome.py
+│       ├── gui.py
+│       ├── main.py
+│       └── worker.py
+├── tests
+│   ├── test_ddc.py
+│   ├── test_gui_smoke.py
+│   └── test_updater.py
+└── uninstall.sh
+```
+
+## Ön koşullar
+
+- Ubuntu 26.04 LTS ve GNOME Xorg oturumu
+- DDC/CI destekli bir monitör
+- Monitörün ekran menüsünde DDC/CI seçeneğinin açık olması
+- Kurulum sırasında paket indirmek için internet bağlantısı
+- `sudo` yetkisi
+
+Giriş ekranında kullanıcıyı seçtikten sonra dişli simgesinden **Ubuntu on Xorg**
+oturumunu seçin. Oturum açtıktan sonra doğrulayın:
+
+```bash
+echo "$XDG_SESSION_TYPE"
+```
+
+Çıktı `x11` olmalıdır.
+
+## Tek komutla kurulum
+
+Depo klasöründe:
+
+```bash
+chmod +x install.sh uninstall.sh
+./install.sh
+```
+
+Kurulum betiği şunları otomatik yapar:
+
+1. `apt-requirements.txt` içindeki `ddcutil`, I²C ve X11/Qt çalışma zamanı
+   paketlerini kurar.
+2. `/etc/modules-load.d/i2c-dev.conf` dosyasını oluşturur ve `i2c-dev` modülünü
+   hemen yükler.
+3. `i2c` grubunu oluşturur, kurulumu başlatan kullanıcıyı bu gruba ekler ve I²C
+   aygıtları için grup erişimli udev kuralını kurar.
+4. Uygulamayı `/opt/aw2724dm-control` altına kopyalar ve sanal ortamda Python
+   bağımlılıklarını kurar.
+5. `/usr/local/bin/aw2724dm-control` sembolik bağlantısını, uygulama menüsü
+   girdisini ve simgeyi kurar.
+
+> **Önemli:** Grup üyeliği çalışan oturuma sonradan eklenemez. Kurulumdan sonra
+> GNOME oturumunu tamamen kapatıp yeniden açın; yalnızca terminali kapatıp açmak
+> yeterli değildir. Gerekirse bilgisayarı yeniden başlatın.
+
+Yeni oturumda üyeliği ve donanımı sınayın:
+
+```bash
+id -nG | tr ' ' '\n' | grep '^i2c$'
+ddcutil detect
+aw2724dm-control --list
+```
+
+## Grafik arayüzü
+
+GNOME uygulama menüsünden **AW2724DM Monitor Control** uygulamasını açın veya:
+
+```bash
+aw2724dm-control
+```
+
+Başlangıçta uygulama `ddcutil detect` ile monitörleri, her monitör için
+`ddcutil capabilities` ile VCP `0x60` giriş değerlerini tarar. İşlemler arayüzü
+dondurmamak için iş parçacığı havuzunda yürütülür.
+
+- **Giriş kaynakları:** Algılanan porta tek tıklayarak geçilir.
+- **Hızlı geçiş:** İki farklı giriş seçilir. Seçim hemen yapılandırmaya kaydolur;
+  düğme ve `--toggle` aynı çifti kullanır.
+- **Parlaklık / kontrast:** Kaydırıcı bırakıldığında sırasıyla VCP `0x10` ve
+  `0x12` yazılır.
+- **Port takma adları:** Tablonun son sütununa `Ev Bilgisayarı` gibi bir ad yazın.
+  Boş bırakırsanız monitörün bildirdiği ad kullanılır.
+- **Sistem tepsisi:** Pencereyi kapatmak uygulamayı tepsiye gizler. Tepsi
+  menüsünden giriş seçilebilir veya uygulamadan tamamen çıkılabilir.
+- **Güncellemeler:** Uygulama açılıştan sonra GitHub ana dalındaki sürüm numarasını
+  asenkron olarak denetler. Denetim en fazla altı saatte bir yapılır. Yeni sürüm
+  bulunduğunda kullanıcıdan onay ister; onay verilirse `pkexec` yönetici penceresi
+  üzerinden güncellemeyi indirip kurar. **Güncellemeleri Denetle** düğmesiyle elle
+  denetim de yapılabilir.
+
+GNOME Shell, geleneksel tepsi simgelerini kendi başına göstermez. Ubuntu 26.04'te
+AppIndicator desteğini sağlayan `gnome-shell-ubuntu-extensions` paketi kurulur.
+Simge görünmüyorsa Xorg
+oturumunu yeniden başlatın ve Uzantılar uygulamasında **AppIndicator and KStatusNotifierItem Support**
+uzantısının etkin olduğunu doğrulayın.
+
+## CLI kullanımı
+
+Genel biçim:
+
+```text
+aw2724dm-control [--display NUMARA] İŞLEM
+```
+
+Örnekler:
+
+```bash
+# Monitörleri ve capabilities çıktısından çözümlenen girişleri göster
+aw2724dm-control --list
+
+# Seçili monitörde HDMI 1'e geç
+aw2724dm-control --set-input 0x11
+
+# ddcutil ekran 2 üzerinde DisplayPort 1'e geç
+aw2724dm-control --display 2 --set-input 0x0f
+
+# GUI'de seçilmiş iki port arasında geç
+aw2724dm-control --toggle
+
+# Komutta belirtilen iki port arasında geç
+aw2724dm-control --toggle 0x0f 0x11
+
+# Parlaklık ve kontrast ayarla
+aw2724dm-control --brightness 70
+aw2724dm-control --contrast 65
+
+# Birden fazla ayarı aynı çağrıda uygula
+aw2724dm-control --display 1 --brightness 70 --contrast 65
+```
+
+Desteklenen tüm seçenekler:
+
+```bash
+aw2724dm-control --help
+```
+
+Giriş kodları monitörün MCCS capabilities yanıtından alınır. Yaygın değerler
+`0x0f` (DisplayPort 1), `0x10` (DisplayPort 2), `0x11` (HDMI 1) ve `0x12`
+(HDMI 2) olsa da her monitörde aynı olmak zorunda değildir; önce `--list`
+çıktısını kullanın.
+
+## GNOME klavye kısayolu
+
+### Uygulama içinden
+
+1. GUI'de hedef monitörü seçin.
+2. **GNOME Kısayolu Ata…** düğmesine basın.
+3. Geçiş eylemi için kısayolun kullanacağı iki DisplayPort/HDMI girişini seçin;
+   doğrudan geçiş için hedef portu seçin.
+4. Kısayol kutusunu seçip istediğiniz tuş birleşimine basın.
+5. Onaylayın.
+
+Uygulama `org.gnome.settings-daemon.plugins.media-keys` altındaki boş bir custom
+keybinding yolunu bulur, adı/komutu/tuşu yazar ve mevcut kısayolları koruyarak
+listeye ekler.
+
+### GNOME Ayarları üzerinden
+
+**Ayarlar → Klavye → Klavye Kısayollarını Görüntüle ve Özelleştir → Özel
+Kısayollar** yolunda yeni bir kısayol oluşturun. Komut alanına örneğin:
+
+```bash
+aw2724dm-control --display 1 --toggle 0x0f 0x11
+```
+
+veya:
+
+```bash
+aw2724dm-control --display 1 --set-input 0x11
+```
+
+yazın. Bu komutlar GUI açık değilken de çalışır.
+
+## Yapılandırma
+
+Kullanıcı ayarları şurada tutulur:
+
+```text
+~/.config/aw2724dm-control/config.json
+```
+
+Dosya atomik olarak yazılır ve izinleri `0600` yapılır. Monitör numarası,
+port takma adları ve geçiş çiftleri burada saklanır. Uygulama kapalıyken dosyayı
+düzenleyebilirsiniz; geçersiz JSON algılanırsa dosya ezilmeden güvenli
+varsayılanlarla devam edilir.
+
+## Sorun giderme
+
+### `Permission denied` veya monitör bulunamıyor
+
+```bash
+groups
+ls -l /dev/i2c-*
+lsmod | grep i2c_dev
+ddcutil environment
+ddcutil detect
+```
+
+Kullanıcı gruplarında `i2c` yoksa oturumu kapatıp açın. Monitör menüsünde DDC/CI
+açık olmalıdır. Bazı dizüstü GPU sürücüleri I²C veri yolunu dışarı açmayabilir.
+
+### `Feature 0x60` görünmüyor
+
+Monitör DDC/CI üzerinden giriş değiştirmeyi ilan etmiyor olabilir. Ham çıktıyı
+inceleyin:
+
+```bash
+ddcutil capabilities --display 1
+```
+
+### GUI X11 hatası veriyor
+
+```bash
+echo "$XDG_SESSION_TYPE"
+echo "$DISPLAY"
+```
+
+İlk komut `x11`, ikinci komut genellikle `:0` veya `:1` döndürmelidir. Wayland
+oturumundan çıkıp giriş ekranında **Ubuntu on Xorg** seçin.
+
+### Monitör giriş değişiminden sonra kısa süre yanıt vermiyor
+
+Giriş değişince monitör I²C bağlantısını birkaç saniyeliğine kesebilir. Bu
+donanım davranışıdır; birkaç saniye bekleyip yenilemeyi tekrar deneyin.
+
+## Kaldırma
+
+Uygulamayı, masaüstü girdisini ve uygulamaya ait sistem yapılandırmasını kaldırın:
+
+```bash
+./uninstall.sh
+```
+
+Kullanıcı yapılandırmasını da silmek için:
+
+```bash
+./uninstall.sh --purge
+```
+
+Kaldırma betiği `i2c` grubunu ve `apt` paketlerini kaldırmaz; bunlar başka DDC/I²C
+uygulamalarında kullanılıyor olabilir. Kullanıcıyı gruptan çıkarmak isterseniz
+bunu ayrıca ve bilinçli olarak yapın.
+
+## Güvenlik notları
+
+- Donanım komutlarında `shell=True` kullanılmaz; tüm argümanlar ayrı süreç
+  argümanı olarak aktarılır.
+- CLI değerleri aralık denetiminden geçirilir.
+- GUI donanım işlemleri süre aşımıyla çalışır ve hata çıktısını kullanıcıya
+  gösterir.
+- Uygulamanın normal çalışması `sudo` istemez. `sudo` yalnızca kurulum ve
+  kaldırma sırasında sistem dosyaları için kullanılır.
+
+## Geliştirici testleri
+
+Bağımlılıklar kurulmuş bir sanal ortamda donanım gerektirmeyen parser ve GUI
+smoke testlerini çalıştırın:
+
+```bash
+PYTHONPATH=src QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s tests -v
+```
