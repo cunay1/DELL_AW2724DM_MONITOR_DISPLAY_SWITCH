@@ -4,6 +4,10 @@ set -Eeuo pipefail
 REPOSITORY="cunay1/DELL_AW2724DM_MONITOR_DISPLAY_SWITCH"
 PUBLIC_KEY="/opt/aw2724dm-control/release-public-key.pem"
 
+progress() {
+    printf 'AW2724DM_PROGRESS:%s:%s\n' "$1" "$2"
+}
+
 if [[ ${EUID} -ne 0 ]]; then
     echo "Bu yardımcı pkexec üzerinden root olarak çalıştırılmalıdır." >&2
     exit 1
@@ -43,11 +47,15 @@ ARCHIVE="${UPDATE_DIR}/${ASSET_NAME}"
 CHECKSUM="${ARCHIVE}.sha256"
 SIGNATURE="${ARCHIVE}.sig"
 
+download_progress=10
 for suffix in '' '.sha256' '.sig'; do
+    progress "${download_progress}" download
     curl --fail --location --proto '=https' --tlsv1.2 --silent --show-error \
         "${DOWNLOAD_BASE}/${ASSET_NAME}${suffix}" --output "${ARCHIVE}${suffix}"
+    download_progress=$((download_progress + 8))
 done
 
+progress 35 verify
 if [[ $(wc -l < "${CHECKSUM}") -ne 1 ]] || ! grep -Eq "^[0-9a-fA-F]{64}  ${ASSET_NAME}$" "${CHECKSUM}"; then
     echo "Güncelleme SHA-256 dosyası geçersiz." >&2
     exit 1
@@ -66,6 +74,7 @@ while IFS= read -r member; do
     fi
 done < <(tar -tzf "${ARCHIVE}")
 
+progress 50 extract
 tar -xzf "${ARCHIVE}" --no-same-owner --no-same-permissions -C "${UPDATE_DIR}"
 SOURCE_DIR="${UPDATE_DIR}/aw2724dm-control-${VERSION}"
 if [[ ! -x ${SOURCE_DIR}/install.sh || ! -f ${SOURCE_DIR}/pyproject.toml ]]; then
@@ -75,5 +84,7 @@ fi
 
 export SUDO_USER="${CALLING_USER}"
 export USER="${CALLING_USER}"
+progress 65 install
 bash "${SOURCE_DIR}/install.sh"
+progress 98 finish
 echo "Güncelleme başarıyla uygulandı."

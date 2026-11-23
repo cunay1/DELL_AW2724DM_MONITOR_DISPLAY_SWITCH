@@ -3,9 +3,14 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field
 
 from .i18n import tr
+from .logging_config import get_logger
+
+
+logger = get_logger("ddc")
 
 
 class DDCError(RuntimeError):
@@ -55,6 +60,8 @@ class DDCUtil:
     def run(self, *arguments: str, timeout: int | None = None) -> str:
         self.ensure_available()
         command = [self.executable, "--noverify", *arguments]
+        started = time.monotonic()
+        logger.debug("Executing ddcutil command: %s", command)
         try:
             result = subprocess.run(
                 command,
@@ -67,12 +74,16 @@ class DDCUtil:
                 env=None,
             )
         except subprocess.TimeoutExpired as exc:
+            logger.error("ddcutil timed out after %s seconds: %s", timeout or self.timeout, command)
             raise DDCError(tr("ddcutil_timeout", seconds=timeout or self.timeout)) from exc
         except OSError as exc:
+            logger.exception("ddcutil could not be executed")
             raise DDCError(tr("ddcutil_run_failed", error=exc)) from exc
         if result.returncode != 0:
             message = (result.stderr or result.stdout).strip()
+            logger.error("ddcutil failed with code %s: %s", result.returncode, message)
             raise DDCError(message or tr("ddcutil_exit", code=result.returncode))
+        logger.debug("ddcutil completed in %.3f seconds", time.monotonic() - started)
         return result.stdout
 
     @staticmethod
@@ -147,7 +158,9 @@ class DDCUtil:
                 capabilities = self.run("capabilities", "--display", str(monitor.display), timeout=30)
                 monitor.inputs = self.parse_inputs(capabilities)
             except DDCError:
+                logger.warning("Could not read capabilities for display %s", monitor.display)
                 monitor.inputs = []
+        logger.info("Detected %s DDC/CI monitor(s)", len(monitors))
         return monitors
 
     def get_vcp(self, display: int, feature: int) -> int:

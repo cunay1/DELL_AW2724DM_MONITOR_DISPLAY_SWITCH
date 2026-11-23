@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import json
+import io
 import unittest
 from unittest.mock import patch
 
 from aw2724dm_control import __version__
-from aw2724dm_control.updater import UpdateError, UpdateInfo, check_for_update
+from aw2724dm_control.updater import (
+    UpdateError,
+    UpdateInfo,
+    _parse_progress_line,
+    apply_update,
+    check_for_update,
+)
 
 
 class FakeResponse:
@@ -38,6 +45,30 @@ class FakeResponse:
 
 
 class UpdaterTests(unittest.TestCase):
+    def test_progress_marker_is_parsed_and_localized(self) -> None:
+        self.assertEqual(
+            _parse_progress_line("AW2724DM_PROGRESS:35:verify"),
+            (35, "Verifying the SHA-256 digest and Ed25519 signature…"),
+        )
+        self.assertIsNone(_parse_progress_line("ordinary installer output"))
+
+    @patch("aw2724dm_control.updater.subprocess.Popen")
+    def test_apply_update_reports_live_progress(self, popen) -> None:
+        process = popen.return_value
+        process.stdout = io.StringIO(
+            "AW2724DM_PROGRESS:10:download\n"
+            "installer detail that belongs in the log\n"
+            "AW2724DM_PROGRESS:65:install\n"
+            "AW2724DM_PROGRESS:98:finish\n"
+        )
+        process.poll.return_value = 0
+        process.wait.return_value = 0
+        progress: list[tuple[int, str]] = []
+        self.assertEqual(apply_update("9.8.7", lambda value, text: progress.append((value, text))), "9.8.7")
+        self.assertEqual(progress[0][0], 2)
+        self.assertIn((65, "Installing system packages and application files…"), progress)
+        self.assertEqual(progress[-1][0], 100)
+
     @patch("aw2724dm_control.updater.urllib.request.urlopen")
     def test_newer_version_is_reported(self, urlopen) -> None:
         urlopen.return_value = FakeResponse("99.0.0")

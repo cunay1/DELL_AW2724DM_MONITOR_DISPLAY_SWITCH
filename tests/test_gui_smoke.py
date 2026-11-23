@@ -122,6 +122,40 @@ class GUISmokeTests(unittest.TestCase):
             window.tray.hide()
             window.close()
 
+    def test_update_success_dialog_does_not_include_installer_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            window = MainWindow(ConfigStore(Path(directory) / "config.json"), FakeDDC())
+            oversized_output = "installer output\n" * 1000
+            with (
+                patch("aw2724dm_control.gui.QMessageBox.information") as information,
+                patch.object(window, "quit_application") as quit_application,
+            ):
+                window._update_applied(oversized_output)
+            message = information.call_args.args[2]
+            self.assertNotIn("installer output", message)
+            self.assertLess(len(message), 300)
+            quit_application.assert_called_once_with()
+            window.really_quit = True
+            window.tray.hide()
+            window.close()
+
+    def test_update_uses_stage_progress_dialog(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            window = MainWindow(ConfigStore(Path(directory) / "config.json"), FakeDDC())
+            with patch.object(window.pool, "start") as start:
+                window._start_update("9.8.7")
+            self.assertIsNotNone(window.update_progress_dialog)
+            self.assertEqual(window.update_progress_dialog.value(), 2)
+            self.assertFalse(window.update_button.isEnabled())
+            worker = start.call_args.args[0]
+            worker.signals.progress.emit(65, "Installing…")
+            self.assertEqual(window.update_progress_dialog.value(), 65)
+            self.assertEqual(window.update_progress_dialog.labelText(), "Installing…")
+            window._close_update_progress()
+            window.really_quit = True
+            window.tray.hide()
+            window.close()
+
 
 if __name__ == "__main__":
     unittest.main()

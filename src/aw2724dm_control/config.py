@@ -9,6 +9,10 @@ from threading import RLock
 from typing import Any
 
 from .i18n import normalize_language
+from .logging_config import get_logger
+
+
+logger = get_logger("config")
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -40,6 +44,7 @@ class ConfigStore:
                     self.data.update(loaded)
             except (OSError, json.JSONDecodeError):
                 # Bozuk dosyayı ezmeden güvenli varsayılanlarla devam edilir.
+                logger.exception("Configuration could not be loaded: %s", self.path)
                 self._normalize()
                 return
             self._normalize()
@@ -74,6 +79,7 @@ class ConfigStore:
                     os.fsync(handle.fileno())
                 os.replace(temporary, self.path)
                 os.chmod(self.path, 0o600)
+                logger.debug("Configuration saved: %s", self.path)
             finally:
                 if os.path.exists(temporary):
                     os.unlink(temporary)

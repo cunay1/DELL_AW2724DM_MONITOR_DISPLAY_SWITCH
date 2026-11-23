@@ -7,6 +7,10 @@ from . import __version__
 from .config import ConfigStore
 from .ddc import DDCError, DDCUtil
 from .i18n import set_language, tr
+from .logging_config import get_logger, setup_logging
+
+
+logger = get_logger("main")
 
 
 def integer(value: str) -> int:
@@ -104,6 +108,8 @@ def run_gui(config: ConfigStore, ddc: DDCUtil) -> int:
 
 
 def main() -> int:
+    log_path = setup_logging()
+    logger.info("Starting AW2724DM Monitor Control %s; log=%s", __version__, log_path)
     config = ConfigStore()
     set_language(config.data.get("language", "en"))
     args = parser().parse_args()
@@ -117,7 +123,9 @@ def main() -> int:
             args.contrast is not None,
         )
     )
-    return run_cli(args, config, ddc) if cli_requested else run_gui(config, ddc)
+    exit_code = run_cli(args, config, ddc) if cli_requested else run_gui(config, ddc)
+    logger.info("Application exited with code %s", exit_code)
+    return exit_code
 
 
 if __name__ == "__main__":

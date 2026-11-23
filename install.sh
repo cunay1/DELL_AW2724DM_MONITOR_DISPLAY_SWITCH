@@ -18,6 +18,13 @@ if ! getent passwd "${INSTALL_USER}" >/dev/null; then
     exit 1
 fi
 
+APT_QUIET=()
+PIP_QUIET=()
+if [[ -n ${PKEXEC_UID:-} ]]; then
+    APT_QUIET=(-qq)
+    PIP_QUIET=(--quiet)
+fi
+
 for required in requirements.txt apt-requirements.txt pyproject.toml src packaging/45-aw2724dm-control-i2c.rules packaging/i2c-dev.conf packaging/aw2724dm-control.desktop packaging/aw2724dm-control-launcher packaging/aw2724dm-update packaging/release-public-key.pem; do
     if [[ ! -e "${PROJECT_DIR}/${required}" ]]; then
         echo "Eksik proje bileşeni: ${required}" >&2
@@ -28,8 +35,8 @@ done
 mapfile -t APT_PACKAGES < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "${PROJECT_DIR}/apt-requirements.txt")
 
 echo "[1/7] Ubuntu paketleri kuruluyor…"
-sudo apt-get update
-sudo apt-get install -y "${APT_PACKAGES[@]}"
+sudo apt-get "${APT_QUIET[@]}" update
+sudo apt-get "${APT_QUIET[@]}" install -y "${APT_PACKAGES[@]}"
 
 echo "[2/7] i2c-dev ve kullanıcı izinleri yapılandırılıyor…"
 if ! getent group i2c >/dev/null; then
@@ -57,9 +64,9 @@ echo "[4/7] Python sanal ortamı hazırlanıyor…"
 if [[ ! -x "${INSTALL_DIR}/venv/bin/python" ]]; then
     sudo python3 -m venv "${INSTALL_DIR}/venv"
 fi
-sudo "${INSTALL_DIR}/venv/bin/python" -m pip install --upgrade pip setuptools
-sudo "${INSTALL_DIR}/venv/bin/python" -m pip install --requirement "${INSTALL_DIR}/requirements.txt"
-sudo "${INSTALL_DIR}/venv/bin/python" -m pip install --no-build-isolation --no-deps --editable "${INSTALL_DIR}"
+sudo "${INSTALL_DIR}/venv/bin/python" -m pip install "${PIP_QUIET[@]}" --upgrade pip setuptools
+sudo "${INSTALL_DIR}/venv/bin/python" -m pip install "${PIP_QUIET[@]}" --requirement "${INSTALL_DIR}/requirements.txt"
+sudo "${INSTALL_DIR}/venv/bin/python" -m pip install "${PIP_QUIET[@]}" --no-build-isolation --no-deps --editable "${INSTALL_DIR}"
 
 echo "[5/7] Komut ve masaüstü girdisi kuruluyor…"
 sudo ln -sfn "${INSTALL_DIR}/aw2724dm-control" "${COMMAND_LINK}"

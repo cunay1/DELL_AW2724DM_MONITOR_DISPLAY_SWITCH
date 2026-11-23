@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFileDialog,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -20,6 +22,7 @@ from PyQt6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QProgressDialog,
     QSlider,
     QStatusBar,
     QSystemTrayIcon,
@@ -35,8 +38,12 @@ from .config import ConfigStore
 from .ddc import DDCUtil, InputSource, Monitor
 from .gnome import install_shortcut
 from .i18n import get_language, set_language, tr
+from .logging_config import export_logs, get_logger
 from .updater import UpdateInfo, apply_update, check_for_update
 from .worker import Worker
+
+
+logger = get_logger("gui")
 
 
 def icon_path() -> Path:
@@ -113,6 +120,8 @@ class MainWindow(QMainWindow):
         self.busy_count = 0
         self.really_quit = False
         self._updating_aliases = False
+        self.update_progress_dialog: QProgressDialog | None = None
+        self.update_worker: Worker | None = None
 
         self.setWindowTitle(tr("window_title"))
         self.setWindowIcon(QIcon(str(icon_path())))
@@ -121,6 +130,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_menu()
         self._build_tray()
+        logger.info("Main window created; language=%s", get_language())
         self.refresh_monitors()
         QTimer.singleShot(2500, self._automatic_update_check)
 
@@ -222,6 +232,10 @@ class MainWindow(QMainWindow):
             language_menu.addAction(action)
 
         help_menu = self.menuBar().addMenu(tr("help"))
+        export_action = QAction(tr("export_logs"), self)
+        export_action.triggered.connect(self.export_support_logs)
+        help_menu.addAction(export_action)
+        help_menu.addSeparator()
         about_action = QAction(tr("about"), self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
@@ -231,6 +245,7 @@ class MainWindow(QMainWindow):
             return
         self.config.data["language"] = language
         self.config.save()
+        logger.info("Language changed to %s", language)
         set_language(language)
         QMessageBox.information(self, tr("language_changed_title"), tr("language_changed"))
         program = "/usr/local/bin/aw2724dm-control"
@@ -248,6 +263,31 @@ class MainWindow(QMainWindow):
             self,
             tr("about_title"),
             tr("about_html", version=__version__),
+        )
+
+    def export_support_logs(self) -> None:
+        suggested = Path.home() / (
+            "aw2724dm-control-logs-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".zip"
+        )
+        filename, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            tr("export_logs_title"),
+            str(suggested),
+            tr("log_archive_filter"),
+        )
+        if not filename:
+            return
+        try:
+            archive = export_logs(Path(filename))
+        except Exception as exc:
+            logger.exception("Log export failed")
+            self._show_error(str(exc))
+            return
+        logger.info("Support logs exported to %s", archive)
+        QMessageBox.information(
+            self,
+            tr("logs_exported_title"),
+            tr("logs_exported", path=archive),
         )
 
     @staticmethod
@@ -322,6 +362,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(tr("ready"), 3000)
 
     def _show_error(self, message: str) -> None:
+        logger.error("User-visible operation error: %s", message)
         self.statusBar().showMessage(tr("error"), 4000)
         QMessageBox.critical(self, tr("operation_error"), message)
 
@@ -330,6 +371,7 @@ class MainWindow(QMainWindow):
         return self.monitors[index] if 0 <= index < len(self.monitors) else None
 
     def refresh_monitors(self) -> None:
+        logger.debug("Refreshing monitor list")
         self._run_async(
             self.ddc.detect,
             success=self._monitors_loaded,
@@ -490,6 +532,7 @@ class MainWindow(QMainWindow):
     def set_input(self, code: int) -> None:
         monitor = self.current_monitor()
         if monitor:
+            logger.info("Setting display %s input to 0x%02x", monitor.display, code)
             self._run_async(
                 self.ddc.set_input,
                 monitor.display,
@@ -523,6 +566,9 @@ class MainWindow(QMainWindow):
     def set_control(self, feature: int, value: int, name: str) -> None:
         monitor = self.current_monitor()
         if monitor:
+            logger.info(
+                "Setting display %s VCP 0x%02x to %s", monitor.display, feature, value
+            )
             self._run_async(
                 self.ddc.set_vcp,
                 monitor.display,
@@ -610,19 +656,52 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes,
         )
         if answer == QMessageBox.StandardButton.Yes:
-            self._run_async(
-                apply_update,
-                info.available_version,
-                success=self._update_applied,
-                message=tr("installing_update"),
-            )
+            self._start_update(info.available_version)
 
-    def _update_applied(self, result: object) -> None:
-        details = str(result).strip()
-        message = tr("update_applied")
-        if details:
-            message += f"\n\n{details}"
-        QMessageBox.information(self, tr("update_complete"), message)
+    def _start_update(self, version: str) -> None:
+        logger.info("User approved update to %s", version)
+        self.update_button.setEnabled(False)
+        dialog = QProgressDialog(tr("update_stage_authorize"), "", 0, 100, self)
+        dialog.setWindowTitle(tr("update_progress_title"))
+        dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        dialog.setCancelButton(None)
+        dialog.setMinimumDuration(0)
+        dialog.setAutoClose(False)
+        dialog.setAutoReset(False)
+        dialog.setValue(2)
+        dialog.show()
+        self.update_progress_dialog = dialog
+        worker = Worker(apply_update, version, provide_progress=True)
+        worker.signals.progress.connect(self._update_progress_changed)
+        worker.signals.succeeded.connect(self._update_applied)
+        worker.signals.failed.connect(self._update_failed)
+        worker.signals.finished.connect(self._update_worker_finished)
+        self.update_worker = worker
+        self.pool.start(worker)
+
+    def _update_progress_changed(self, value: int, message: str) -> None:
+        if self.update_progress_dialog is not None:
+            self.update_progress_dialog.setLabelText(message)
+            self.update_progress_dialog.setValue(value)
+        self.statusBar().showMessage(f"{message} ({value}%)")
+
+    def _close_update_progress(self) -> None:
+        if self.update_progress_dialog is not None:
+            self.update_progress_dialog.close()
+            self.update_progress_dialog.deleteLater()
+            self.update_progress_dialog = None
+
+    def _update_failed(self, message: str) -> None:
+        self._close_update_progress()
+        self._show_error(message)
+
+    def _update_worker_finished(self) -> None:
+        self.update_button.setEnabled(True)
+        self.update_worker = None
+
+    def _update_applied(self, _result: object) -> None:
+        self._close_update_progress()
+        QMessageBox.information(self, tr("update_complete"), tr("update_applied"))
         self.quit_application()
 
 

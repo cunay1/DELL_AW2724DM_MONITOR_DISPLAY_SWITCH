@@ -1,20 +1,27 @@
 from __future__ import annotations
 
 import json
+import queue
 import re
 import subprocess
+import threading
+import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import __version__
 from .i18n import tr
+from .logging_config import get_logger
 
 
 REPOSITORY = "cunay1/DELL_AW2724DM_MONITOR_DISPLAY_SWITCH"
 RELEASE_API_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 RELEASE_PAGE = f"https://github.com/{REPOSITORY}/releases"
 UPDATE_HELPER = "/opt/aw2724dm-control/aw2724dm-update"
+PROGRESS_PREFIX = "AW2724DM_PROGRESS:"
+logger = get_logger("updater")
 
 
 class UpdateError(RuntimeError):
@@ -36,6 +43,7 @@ def _version_key(value: str) -> tuple[int, ...]:
 
 
 def check_for_update() -> UpdateInfo | None:
+    logger.info("Checking GitHub Releases for updates")
     request = urllib.request.Request(
         RELEASE_API_URL,
         headers={
@@ -74,30 +82,94 @@ def check_for_update() -> UpdateInfo | None:
     if not expected_assets.issubset(assets):
         raise UpdateError(tr("release_assets_missing"))
     if _version_key(available) > _version_key(__version__):
+        logger.info("Update available: %s -> %s", __version__, available)
         return UpdateInfo(__version__, available, str(payload.get("html_url", RELEASE_PAGE)))
+    logger.info("No update available; current=%s latest=%s", __version__, available)
     return None
 
 
-def apply_update(version: str) -> str:
+def _parse_progress_line(line: str) -> tuple[int, str] | None:
+    if not line.startswith(PROGRESS_PREFIX):
+        return None
+    parts = line.strip().split(":", 2)
+    if len(parts) != 3 or not parts[1].isdigit():
+        return None
+    value = max(0, min(100, int(parts[1])))
+    stage_keys = {
+        "download": "update_stage_download",
+        "verify": "update_stage_verify",
+        "extract": "update_stage_extract",
+        "install": "update_stage_install",
+        "finish": "update_stage_finish",
+    }
+    message_key = stage_keys.get(parts[2])
+    return (value, tr(message_key)) if message_key else None
+
+
+def apply_update(
+    version: str,
+    progress_callback: Callable[[int, str], None] | None = None,
+) -> str:
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise UpdateError(tr("invalid_update_version", version=version))
+    progress = progress_callback or (lambda _value, _message: None)
+    progress(2, tr("update_stage_authorize"))
+    logger.info("Starting signed update to version %s", version)
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             ["pkexec", UPDATE_HELPER, version],
-            check=False,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=300,
         )
-    except subprocess.TimeoutExpired as exc:
-        raise UpdateError(tr("update_timeout")) from exc
     except OSError as exc:
+        logger.exception("Update helper could not be started")
         raise UpdateError(tr("update_helper_failed", error=exc)) from exc
-    if result.returncode != 0:
-        message = (result.stderr or result.stdout).strip()
-        if result.returncode in (126, 127):
-            message = tr("authorization_cancelled")
-        raise UpdateError(message or tr("update_exit", code=result.returncode))
-    return result.stdout.strip()
+
+    output: queue.Queue[str | None] = queue.Queue(maxsize=1000)
+
+    def read_output() -> None:
+        assert process.stdout is not None
+        for raw_line in process.stdout:
+            output.put(raw_line.rstrip("\r\n"))
+        output.put(None)
+
+    threading.Thread(target=read_output, name="update-output", daemon=True).start()
+    deadline = time.monotonic() + 300
+    reader_finished = False
+    last_output = ""
+    while process.poll() is None or not reader_finished:
+        if time.monotonic() >= deadline:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            logger.error("Update helper timed out")
+            raise UpdateError(tr("update_timeout"))
+        try:
+            line = output.get(timeout=0.2)
+        except queue.Empty:
+            continue
+        if line is None:
+            reader_finished = True
+            continue
+        parsed = _parse_progress_line(line)
+        if parsed:
+            logger.info("Update progress %s%%: %s", parsed[0], parsed[1])
+            progress(*parsed)
+        elif line:
+            last_output = line[-500:]
+            logger.debug("Update helper: %s", line)
+
+    return_code = process.wait()
+    if return_code != 0:
+        logger.error("Update helper exited with code %s; last output: %s", return_code, last_output)
+        if return_code in (126, 127):
+            raise UpdateError(tr("authorization_cancelled"))
+        raise UpdateError(tr("update_failed_log", code=return_code))
+    progress(100, tr("update_stage_finish"))
+    logger.info("Signed update to version %s completed", version)
+    return version

@@ -46,11 +46,13 @@ ihtiyaç duymaz.
 │       ├── gnome.py
 │       ├── gui.py
 │       ├── i18n.py
+│       ├── logging_config.py
 │       ├── main.py
 │       └── worker.py
 ├── tests
 │   ├── test_ddc.py
 │   ├── test_gui_smoke.py
+│   ├── test_logging.py
 │   └── test_updater.py
 └── uninstall.sh
 ```
@@ -142,6 +144,10 @@ başlar.
   Ed25519 imzası `/opt/aw2724dm-control/release-public-key.pem` ile doğrulanır;
   doğrulama başarısızsa root kurulumu başlamaz. **Güncellemeleri Denetle** düğmesiyle
   elle denetim de yapılabilir.
+- **Güncelleme ilerlemesi:** Yönetici onayı, indirme, SHA-256/Ed25519
+  doğrulaması, arşiv açma ve kurulum aşamaları yüzdelik ilerleme çubuğunda
+  gösterilir. Uzun `apt`, `pip` ve kurulum çıktıları sonuç penceresine eklenmez;
+  log dosyasına yazılır.
 - **Sürüm ve Hakkında:** Sürüm numarası durum çubuğunda görünür. Ayrıntılar
   için **Yardım → Hakkında** menüsünü veya tepsi menüsünü kullanın.
 
@@ -241,6 +247,22 @@ port takma adları ve geçiş çiftleri burada saklanır. Uygulama kapalıyken d
 düzenleyebilirsiniz; geçersiz JSON algılanırsa dosya ezilmeden güvenli
 varsayılanlarla devam edilir.
 
+## Loglama ve log dışa aktarma
+
+Uygulama kullanımı, DDC hataları, arka plan işlem hataları ve ayrıntılı
+güncelleme çıktısı şu dosyaya yazılır:
+
+```text
+~/.local/state/aw2724dm-control/aw2724dm-control.log
+```
+
+Log 1 MB boyutunda döner ve en fazla beş eski dosya saklanır. Dizin ve dosyalar
+yalnızca kullanıcının okuyabileceği izinlerle oluşturulur. **Help/Yardım →
+Export Logs…/Logları Dışa Aktar…** seçeneği dönen logları ve temel sistem
+bilgisini bir ZIP destek paketine kaydeder. Paket `config.json`, port takma adları
+ve klavye kısayolu yapılandırmasını içermez. Donanım ve hata ayrıntıları
+bulunabileceği için paylaşmadan önce arşivi inceleyin.
+
 ## Sorun giderme
 
 ### `Permission denied` veya monitör bulunamıyor
@@ -332,8 +354,8 @@ Yeni sürüm için iki sürüm alanını güncelleyin, testleri çalıştırıp 
 gönderin ve ardından etiketi yayımlayın:
 
 ```bash
-git tag -a v1.5.0 -m "AW2724DM Monitor Control 1.5.0"
-git push origin v1.5.0
+git tag -a v1.6.0 -m "AW2724DM Monitor Control 1.6.0"
+git push origin v1.6.0
 ```
 
 GitHub Actions kaynak arşivini deterministik olarak üretir, SHA-256 dosyasını

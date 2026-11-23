@@ -35,6 +35,8 @@ and does not depend on the display server.
 - Per-user configuration in `~/.config/aw2724dm-control/config.json`
 - Automatic update checks through GitHub Releases
 - SHA-256 and Ed25519 verification before an update is installed
+- Stage-based update progress with a percentage bar
+- Rotating application logs and one-click support-log export
 - In-application version display and About dialog
 - English and Turkish interface selection, with English as the default
 - Ubuntu 26.04 GitHub Actions CI and signed Release workflow
@@ -231,6 +233,27 @@ An update is installed only after all of the following checks pass:
 
 The privileged installation step is never started when verification fails.
 
+During installation, a progress dialog reports administrator authorization,
+download, signature verification, archive extraction, package installation,
+and completion stages. Verbose `apt`, `pip`, and installer output is written to
+the application log instead of being placed in the completion dialog.
+
+## Logs and support export
+
+Runtime activity, DDC failures, background-task exceptions, and detailed update
+output are written to:
+
+```text
+~/.local/state/aw2724dm-control/aw2724dm-control.log
+```
+
+The log rotates at 1 MB and keeps up to five older files. Log directories and
+files use private user permissions. Open **Help → Export Logs…** to create a ZIP
+support bundle containing the rotated logs and basic system information. The
+bundle deliberately excludes `config.json`, aliases, and keyboard-shortcut
+configuration. Review the archive before sharing it because hardware and error
+details may still be present.
+
 ## Configuration
 
 Settings are stored in:
@@ -239,8 +262,9 @@ Settings are stored in:
 ~/.config/aw2724dm-control/config.json
 ```
 
-The file contains the selected monitor, aliases, toggle pairs, tray behavior,
-and update-check timestamp. It is written atomically with `0600` permissions.
+The file contains the selected monitor, aliases, toggle pairs, language, tray
+behavior, and update-check timestamp. It is written atomically with `0600`
+permissions.
 
 ## Troubleshooting
 
