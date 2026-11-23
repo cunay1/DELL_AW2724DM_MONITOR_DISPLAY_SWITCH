@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y desktop-file-utils libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
+      - name: Install Python dependencies
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --disable-pip-version-check --upgrade pip setuptools
+          .venv/bin/python -m pip install --disable-pip-version-check -r requirements.txt
+          .venv/bin/python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .
+      - name: Run test suite
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPATH: src
+          QT_QPA_PLATFORM: offscreen
+        run: .venv/bin/python -m unittest discover -s tests -v
+      - name: Validate packaging files
+        run: |
+          bash -n install.sh uninstall.sh packaging/aw2724dm-control-launcher packaging/aw2724dm-update
+          desktop-file-validate packaging/aw2724dm-control.desktop

@@ -1,0 +1,76 @@
+name: Signed Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and sign release
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Validate tag and source version
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          source_version="$(sed -n 's/^__version__ = "\([^"]*\)"$/\1/p' src/aw2724dm_control/__init__.py)"
+          [[ "${version}" == "${source_version}" ]]
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "${GITHUB_SHA}" origin/main
+      - name: Run tests
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPATH: src
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --disable-pip-version-check --upgrade pip setuptools
+          .venv/bin/python -m pip install --disable-pip-version-check -r requirements.txt
+          .venv/bin/python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .
+          .venv/bin/python -m unittest discover -s tests -v
+          bash -n install.sh uninstall.sh packaging/aw2724dm-control-launcher packaging/aw2724dm-update
+      - name: Build deterministic source archive
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          archive="aw2724dm-control-${version}.tar.gz"
+          mkdir -p dist
+          git archive --format=tar --prefix="aw2724dm-control-${version}/" "${GITHUB_SHA}" | gzip -n > "dist/${archive}"
+          (cd dist && sha256sum "${archive}" > "${archive}.sha256")
+      - name: Sign and verify archive
+        shell: bash
+        env:
+          RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          [[ -n "${RELEASE_SIGNING_PRIVATE_KEY}" ]]
+          version="${GITHUB_REF_NAME#v}"
+          archive="dist/aw2724dm-control-${version}.tar.gz"
+          key_file="$(mktemp)"
+          trap 'rm -f -- "${key_file}"' EXIT
+          chmod 0600 "${key_file}"
+          printf '%s' "${RELEASE_SIGNING_PRIVATE_KEY}" > "${key_file}"
+          openssl pkeyutl -sign -inkey "${key_file}" -rawin -in "${archive}" -out "${archive}.sig"
+          openssl pkeyutl -verify -pubin -inkey packaging/release-public-key.pem -rawin \
+            -in "${archive}" -sigfile "${archive}.sig"
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --verify-tag \
+            --title "AW2724DM Monitor Control ${GITHUB_REF_NAME}" \
+            --generate-notes

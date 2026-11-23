@@ -11,3 +11,4 @@ desktop-file-utils
 gnome-shell-ubuntu-extensions
 curl
 pkexec
+openssl

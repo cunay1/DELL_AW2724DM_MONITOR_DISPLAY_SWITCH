@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ARCHIVE_URL="https://github.com/cunay1/DELL_AW2724DM_MONITOR_DISPLAY_SWITCH/archive/refs/heads/main.tar.gz"
+REPOSITORY="cunay1/DELL_AW2724DM_MONITOR_DISPLAY_SWITCH"
+PUBLIC_KEY="/opt/aw2724dm-control/release-public-key.pem"
 
 if [[ ${EUID} -ne 0 ]]; then
     echo "Bu yardımcı pkexec üzerinden root olarak çalıştırılmalıdır." >&2
+    exit 1
+fi
+
+VERSION="${1:-}"
+if [[ ! ${VERSION} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Geçersiz veya eksik sürüm numarası." >&2
+    exit 2
+fi
+if [[ ! -f ${PUBLIC_KEY} || -L ${PUBLIC_KEY} ]]; then
+    echo "Güncelleme doğrulama açık anahtarı bulunamadı veya güvenli değil." >&2
     exit 1
 fi
 
@@ -26,9 +37,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
-ARCHIVE="${UPDATE_DIR}/source.tar.gz"
-curl --fail --location --proto '=https' --tlsv1.2 --silent --show-error \
-    "${ARCHIVE_URL}" --output "${ARCHIVE}"
+ASSET_NAME="aw2724dm-control-${VERSION}.tar.gz"
+DOWNLOAD_BASE="https://github.com/${REPOSITORY}/releases/download/v${VERSION}"
+ARCHIVE="${UPDATE_DIR}/${ASSET_NAME}"
+CHECKSUM="${ARCHIVE}.sha256"
+SIGNATURE="${ARCHIVE}.sig"
+
+for suffix in '' '.sha256' '.sig'; do
+    curl --fail --location --proto '=https' --tlsv1.2 --silent --show-error \
+        "${DOWNLOAD_BASE}/${ASSET_NAME}${suffix}" --output "${ARCHIVE}${suffix}"
+done
+
+if [[ $(wc -l < "${CHECKSUM}") -ne 1 ]] || ! grep -Eq "^[0-9a-fA-F]{64}  ${ASSET_NAME}$" "${CHECKSUM}"; then
+    echo "Güncelleme SHA-256 dosyası geçersiz." >&2
+    exit 1
+fi
+(cd "${UPDATE_DIR}" && sha256sum --check --strict "${ASSET_NAME}.sha256")
+if ! openssl pkeyutl -verify -pubin -inkey "${PUBLIC_KEY}" -rawin \
+    -in "${ARCHIVE}" -sigfile "${SIGNATURE}" >/dev/null; then
+    echo "Güncellemenin Ed25519 imzası doğrulanamadı; kurulum iptal edildi." >&2
+    exit 1
+fi
 
 while IFS= read -r member; do
     if [[ ${member} == /* || ${member} == ../* || ${member} == *'/../'* ]]; then
@@ -38,8 +67,8 @@ while IFS= read -r member; do
 done < <(tar -tzf "${ARCHIVE}")
 
 tar -xzf "${ARCHIVE}" --no-same-owner --no-same-permissions -C "${UPDATE_DIR}"
-SOURCE_DIR="$(find "${UPDATE_DIR}" -mindepth 1 -maxdepth 1 -type d -name 'DELL_AW2724DM_MONITOR_DISPLAY_SWITCH-*' -print -quit)"
-if [[ -z ${SOURCE_DIR} || ! -x ${SOURCE_DIR}/install.sh || ! -f ${SOURCE_DIR}/pyproject.toml ]]; then
+SOURCE_DIR="${UPDATE_DIR}/aw2724dm-control-${VERSION}"
+if [[ ! -x ${SOURCE_DIR}/install.sh || ! -f ${SOURCE_DIR}/pyproject.toml ]]; then
     echo "İndirilen güncelleme beklenen proje yapısına sahip değil." >&2
     exit 1
 fi

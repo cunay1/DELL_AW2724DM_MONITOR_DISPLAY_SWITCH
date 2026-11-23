@@ -12,6 +12,11 @@ ve Qt `xcb` arka ucunu kullanır. CLI işlemleri grafik oturumuna ihtiyaç duyma
 
 ```text
 .
+├── .github
+│   ├── dependabot.yml
+│   └── workflows
+│       ├── ci.yml
+│       └── release.yml
 ├── apt-requirements.txt
 ├── install.sh
 ├── packaging
@@ -19,10 +24,12 @@ ve Qt `xcb` arka ucunu kullanır. CLI işlemleri grafik oturumuna ihtiyaç duyma
 │   ├── aw2724dm-update
 │   ├── aw2724dm-control-launcher
 │   ├── aw2724dm-control.desktop
-│   └── i2c-dev.conf
+│   ├── i2c-dev.conf
+│   └── release-public-key.pem
 ├── pyproject.toml
 ├── README.md
 ├── requirements.txt
+├── SECURITY.md
 ├── src
 │   ├── assets
 │   │   └── aw2724dm-control.svg
@@ -114,11 +121,12 @@ dondurmamak için iş parçacığı havuzunda yürütülür.
   Boş bırakırsanız monitörün bildirdiği ad kullanılır.
 - **Sistem tepsisi:** Pencereyi kapatmak uygulamayı tepsiye gizler. Tepsi
   menüsünden giriş seçilebilir veya uygulamadan tamamen çıkılabilir.
-- **Güncellemeler:** Uygulama açılıştan sonra GitHub ana dalındaki sürüm numarasını
+- **Güncellemeler:** Uygulama açılıştan sonra en son kararlı GitHub Release sürümünü
   asenkron olarak denetler. Denetim en fazla altı saatte bir yapılır. Yeni sürüm
-  bulunduğunda kullanıcıdan onay ister; onay verilirse `pkexec` yönetici penceresi
-  üzerinden güncellemeyi indirip kurar. **Güncellemeleri Denetle** düğmesiyle elle
-  denetim de yapılabilir.
+  bulunduğunda kullanıcıdan onay ister. İndirilen sürüm arşivi, SHA-256 özeti ve
+  Ed25519 imzası `/opt/aw2724dm-control/release-public-key.pem` ile doğrulanır;
+  doğrulama başarısızsa root kurulumu başlamaz. **Güncellemeleri Denetle** düğmesiyle
+  elle denetim de yapılabilir.
 
 GNOME Shell, geleneksel tepsi simgelerini kendi başına göstermez. Ubuntu 26.04'te
 AppIndicator desteğini sağlayan `gnome-shell-ubuntu-extensions` paketi kurulur.
@@ -291,3 +299,28 @@ smoke testlerini çalıştırın:
 ```bash
 PYTHONPATH=src QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s tests -v
 ```
+
+## İmzalı sürüm yayımlama
+
+Release workflow’u yalnızca `vMAJOR.MINOR.PATCH` biçimli etiketlerde çalışır.
+Etiket sürümü hem `src/aw2724dm_control/__init__.py` hem de `pyproject.toml`
+içindeki sürümle aynı olmalıdır. İmzalama anahtarı GitHub’da
+`RELEASE_SIGNING_PRIVATE_KEY` Actions secret olarak saklanır; özel anahtar repoya
+eklenmez.
+
+Yeni sürüm için iki sürüm alanını güncelleyin, testleri çalıştırıp `main` dalına
+gönderin ve ardından etiketi yayımlayın:
+
+```bash
+git tag -a v1.2.0 -m "AW2724DM Monitor Control 1.2.0"
+git push origin v1.2.0
+```
+
+GitHub Actions kaynak arşivini deterministik olarak üretir, SHA-256 dosyasını
+oluşturur, arşivi Ed25519 ile imzalar, imzayı repodaki açık anahtarla yeniden
+doğrular ve üç dosyayı GitHub Release varlığı olarak yayımlar.
+
+Yerel özel anahtar varsayılan olarak
+`~/.config/aw2724dm-control/signing/release-private.pem` konumunda `0600`
+izinleriyle tutulur. Bu dosyayı güvenli ve çevrimdışı bir konuma yedekleyin;
+repoya, Issue'lara veya Release varlıklarına yüklemeyin.

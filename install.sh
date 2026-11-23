@@ -18,7 +18,7 @@ if ! getent passwd "${INSTALL_USER}" >/dev/null; then
     exit 1
 fi
 
-for required in requirements.txt apt-requirements.txt pyproject.toml src packaging/45-aw2724dm-control-i2c.rules packaging/i2c-dev.conf packaging/aw2724dm-control.desktop packaging/aw2724dm-control-launcher packaging/aw2724dm-update; do
+for required in requirements.txt apt-requirements.txt pyproject.toml src packaging/45-aw2724dm-control-i2c.rules packaging/i2c-dev.conf packaging/aw2724dm-control.desktop packaging/aw2724dm-control-launcher packaging/aw2724dm-update packaging/release-public-key.pem; do
     if [[ ! -e "${PROJECT_DIR}/${required}" ]]; then
         echo "Eksik proje bileşeni: ${required}" >&2
         exit 1
@@ -50,6 +50,7 @@ sudo install -m 0644 "${PROJECT_DIR}/pyproject.toml" "${INSTALL_DIR}/pyproject.t
 sudo install -m 0644 "${PROJECT_DIR}/packaging/aw2724dm-control.desktop" "${INSTALL_DIR}/packaging/aw2724dm-control.desktop"
 sudo install -m 0755 "${PROJECT_DIR}/packaging/aw2724dm-control-launcher" "${INSTALL_DIR}/aw2724dm-control"
 sudo install -m 0755 "${PROJECT_DIR}/packaging/aw2724dm-update" "${INSTALL_DIR}/aw2724dm-update"
+sudo install -m 0644 "${PROJECT_DIR}/packaging/release-public-key.pem" "${INSTALL_DIR}/release-public-key.pem"
 sudo chown -R root:root "${INSTALL_DIR}"
 
 echo "[4/7] Python sanal ortamı hazırlanıyor…"

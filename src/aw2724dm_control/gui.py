@@ -556,6 +556,7 @@ class MainWindow(QMainWindow):
         if answer == QMessageBox.StandardButton.Yes:
             self._run_async(
                 apply_update,
+                info.available_version,
                 success=self._update_applied,
                 message="Güncelleme indiriliyor ve uygulanıyor…",
             )
