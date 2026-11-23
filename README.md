@@ -1,98 +1,85 @@
 # AW2724DM Monitor Control
 
-Dell Alienware AW2724DM ve DDC/CI destekli diğer monitörlerin giriş kaynağını,
-parlaklığını ve kontrastını Ubuntu 26.04 LTS GNOME **X11/Xorg** oturumunda yöneten
-PyQt6 uygulamasıdır. Donanımla `ddcutil` üzerinden konuşur; GUI, CLI, GNOME özel
-klavye kısayolları ve sistem tepsisi birlikte çalışır.
+[Türkçe README](README_TR.md)
 
-Bu sürüm özellikle X11 hedeflidir. GUI, Wayland oturumunda bilinçli olarak başlamaz
-ve Qt `xcb` arka ucunu kullanır. CLI işlemleri grafik oturumuna ihtiyaç duymaz.
+AW2724DM Monitor Control is a graphical monitor input switcher and display
+settings manager developed for **Ubuntu 26.04 LTS with the GNOME X11/Xorg
+desktop session**. It is designed for the Dell Alienware AW2724DM and other
+monitors that support DDC/CI.
 
-## Proje yapısı
+The application communicates with monitor hardware through `ddcutil`. It can
+detect connected monitors and their supported input sources, switch between
+DisplayPort and HDMI inputs, adjust brightness and contrast, and expose the same
+operations through its GUI, command-line interface, GNOME keyboard shortcuts,
+and system tray menu.
 
-```text
-.
-├── .github
-│   ├── dependabot.yml
-│   └── workflows
-│       ├── ci.yml
-│       └── release.yml
-├── apt-requirements.txt
-├── install.sh
-├── packaging
-│   ├── 45-aw2724dm-control-i2c.rules
-│   ├── aw2724dm-update
-│   ├── aw2724dm-control-launcher
-│   ├── aw2724dm-control.desktop
-│   ├── i2c-dev.conf
-│   └── release-public-key.pem
-├── pyproject.toml
-├── README.md
-├── requirements.txt
-├── SECURITY.md
-├── src
-│   ├── assets
-│   │   └── aw2724dm-control.svg
-│   └── aw2724dm_control
-│       ├── __init__.py
-│       ├── __main__.py
-│       ├── config.py
-│       ├── ddc.py
-│       ├── gnome.py
-│       ├── gui.py
-│       ├── main.py
-│       └── worker.py
-├── tests
-│   ├── test_ddc.py
-│   ├── test_gui_smoke.py
-│   └── test_updater.py
-└── uninstall.sh
-```
+> This application intentionally targets X11/Xorg. The graphical interface does
+> not run in a Wayland session and forces Qt to use the `xcb` backend.
 
-## Ön koşullar
+## Features
 
-- Ubuntu 26.04 LTS ve GNOME Xorg oturumu
-- DDC/CI destekli bir monitör
-- Monitörün ekran menüsünde DDC/CI seçeneğinin açık olması
-- Kurulum sırasında paket indirmek için internet bağlantısı
-- `sudo` yetkisi
+- Automatic monitor discovery using `ddcutil detect`
+- Automatic input-source discovery from VCP feature `0x60`
+- Support for Dell Alienware AW2724DM and other DDC/CI monitors
+- One-click switching between DisplayPort and HDMI inputs
+- Toggle shortcuts between any two user-selected input ports
+- Custom aliases such as “Home PC” and “Work Laptop”
+- Brightness control through VCP `0x10`
+- Contrast control through VCP `0x12`
+- GNOME custom keyboard shortcut creation with `gsettings`
+- X11 system tray integration
+- CLI commands suitable for GNOME keyboard shortcuts and scripts
+- Per-user configuration in `~/.config/aw2724dm-control/config.json`
+- Automatic update checks through GitHub Releases
+- SHA-256 and Ed25519 verification before an update is installed
+- Ubuntu 26.04 GitHub Actions CI and signed Release workflow
 
-Giriş ekranında kullanıcıyı seçtikten sonra dişli simgesinden **Ubuntu on Xorg**
-oturumunu seçin. Oturum açtıktan sonra doğrulayın:
+## Requirements
+
+- Ubuntu 26.04 LTS
+- GNOME running in an X11/Xorg session
+- A DDC/CI-compatible monitor
+- DDC/CI enabled in the monitor's on-screen menu
+- Internet access during installation
+- `sudo` access for system package and I²C configuration
+
+At the login screen, select your user, open the gear menu, and choose
+**Ubuntu on Xorg**. Verify the session after logging in:
 
 ```bash
 echo "$XDG_SESSION_TYPE"
 ```
 
-Çıktı `x11` olmalıdır.
+The output must be `x11`.
 
-## Tek komutla kurulum
+## Installation
 
-Depo klasöründe:
+Clone the repository and run the installer:
 
 ```bash
+git clone https://github.com/cunay1/DELL_AW2724DM_MONITOR_DISPLAY_SWITCH.git
+cd DELL_AW2724DM_MONITOR_DISPLAY_SWITCH
 chmod +x install.sh uninstall.sh
 ./install.sh
 ```
 
-Kurulum betiği şunları otomatik yapar:
+The installer:
 
-1. `apt-requirements.txt` içindeki `ddcutil`, I²C ve X11/Qt çalışma zamanı
-   paketlerini kurar.
-2. `/etc/modules-load.d/i2c-dev.conf` dosyasını oluşturur ve `i2c-dev` modülünü
-   hemen yükler.
-3. `i2c` grubunu oluşturur, kurulumu başlatan kullanıcıyı bu gruba ekler ve I²C
-   aygıtları için grup erişimli udev kuralını kurar.
-4. Uygulamayı `/opt/aw2724dm-control` altına kopyalar ve sanal ortamda Python
-   bağımlılıklarını kurar.
-5. `/usr/local/bin/aw2724dm-control` sembolik bağlantısını, uygulama menüsü
-   girdisini ve simgeyi kurar.
+1. Installs `ddcutil`, I²C tools, PyQt6 runtime dependencies, and X11 support
+   packages.
+2. Enables the `i2c-dev` kernel module.
+3. Creates the `i2c` group if necessary and adds the installing user to it.
+4. Installs an I²C udev permission rule.
+5. Installs the application under `/opt/aw2724dm-control`.
+6. Creates `/usr/local/bin/aw2724dm-control`.
+7. Installs the desktop entry, icon, update helper, and update verification key.
 
-> **Önemli:** Grup üyeliği çalışan oturuma sonradan eklenemez. Kurulumdan sonra
-> GNOME oturumunu tamamen kapatıp yeniden açın; yalnızca terminali kapatıp açmak
-> yeterli değildir. Gerekirse bilgisayarı yeniden başlatın.
+### Important: log out after installation
 
-Yeni oturumda üyeliği ve donanımı sınayın:
+Group membership changes do not affect the current desktop session. Fully log
+out of GNOME and log back in using **Ubuntu on Xorg**. Reboot if necessary.
+
+Verify access after starting a new session:
 
 ```bash
 id -nG | tr ' ' '\n' | grep '^i2c$'
@@ -100,133 +87,152 @@ ddcutil detect
 aw2724dm-control --list
 ```
 
-## Grafik arayüzü
+## Running the application
 
-GNOME uygulama menüsünden **AW2724DM Monitor Control** uygulamasını açın veya:
+Open **AW2724DM Monitor Control** from the GNOME application menu or run:
 
 ```bash
 aw2724dm-control
 ```
 
-Başlangıçta uygulama `ddcutil detect` ile monitörleri, her monitör için
-`ddcutil capabilities` ile VCP `0x60` giriş değerlerini tarar. İşlemler arayüzü
-dondurmamak için iş parçacığı havuzunda yürütülür.
+The application scans connected monitors and reads their VCP capabilities in a
+background worker, keeping the GUI responsive during DDC/CI operations.
 
-- **Giriş kaynakları:** Algılanan porta tek tıklayarak geçilir.
-- **Hızlı geçiş:** İki farklı giriş seçilir. Seçim hemen yapılandırmaya kaydolur;
-  düğme ve `--toggle` aynı çifti kullanır.
-- **Parlaklık / kontrast:** Kaydırıcı bırakıldığında sırasıyla VCP `0x10` ve
-  `0x12` yazılır.
-- **Port takma adları:** Tablonun son sütununa `Ev Bilgisayarı` gibi bir ad yazın.
-  Boş bırakırsanız monitörün bildirdiği ad kullanılır.
-- **Sistem tepsisi:** Pencereyi kapatmak uygulamayı tepsiye gizler. Tepsi
-  menüsünden giriş seçilebilir veya uygulamadan tamamen çıkılabilir.
-- **Güncellemeler:** Uygulama açılıştan sonra en son kararlı GitHub Release sürümünü
-  asenkron olarak denetler. Denetim en fazla altı saatte bir yapılır. Yeni sürüm
-  bulunduğunda kullanıcıdan onay ister. İndirilen sürüm arşivi, SHA-256 özeti ve
-  Ed25519 imzası `/opt/aw2724dm-control/release-public-key.pem` ile doğrulanır;
-  doğrulama başarısızsa root kurulumu başlamaz. **Güncellemeleri Denetle** düğmesiyle
-  elle denetim de yapılabilir.
+### Input source controls
 
-GNOME Shell, geleneksel tepsi simgelerini kendi başına göstermez. Ubuntu 26.04'te
-AppIndicator desteğini sağlayan `gnome-shell-ubuntu-extensions` paketi kurulur.
-Simge görünmüyorsa Xorg
-oturumunu yeniden başlatın ve Uzantılar uygulamasında **AppIndicator and KStatusNotifierItem Support**
-uzantısının etkin olduğunu doğrulayın.
+Detected inputs appear as buttons. Select an input to switch immediately. Input
+names reported by the monitor can be replaced with custom aliases.
 
-## CLI kullanımı
+### Toggle shortcuts
 
-Genel biçim:
+Select two different inputs in the Quick Toggle section. The GUI toggle button
+and the default `--toggle` CLI command use that saved pair.
 
-```text
-aw2724dm-control [--display NUMARA] İŞLEM
-```
+The **Assign GNOME Shortcut** dialog also allows each shortcut to use its own
+pair of DisplayPort or HDMI inputs. Press the desired key combination directly
+in the shortcut field.
 
-Örnekler:
+### Brightness and contrast
+
+Brightness uses VCP feature `0x10`; contrast uses `0x12`. The new value is sent
+when the slider is released.
+
+### System tray
+
+Closing the window hides the application in the X11 system tray. Inputs can be
+switched directly from the tray menu. Choose **Quit** from the tray menu to stop
+the application completely.
+
+Ubuntu 26.04 provides AppIndicator support through the
+`gnome-shell-ubuntu-extensions` package, which is installed automatically.
+
+## Command-line interface
+
+List monitors and detected input sources:
 
 ```bash
-# Monitörleri ve capabilities çıktısından çözümlenen girişleri göster
 aw2724dm-control --list
-
-# Seçili monitörde HDMI 1'e geç
-aw2724dm-control --set-input 0x11
-
-# ddcutil ekran 2 üzerinde DisplayPort 1'e geç
-aw2724dm-control --display 2 --set-input 0x0f
-
-# GUI'de seçilmiş iki port arasında geç
-aw2724dm-control --toggle
-
-# Komutta belirtilen iki port arasında geç
-aw2724dm-control --toggle 0x0f 0x11
-
-# Parlaklık ve kontrast ayarla
-aw2724dm-control --brightness 70
-aw2724dm-control --contrast 65
-
-# Birden fazla ayarı aynı çağrıda uygula
-aw2724dm-control --display 1 --brightness 70 --contrast 65
 ```
 
-Desteklenen tüm seçenekler:
+Switch directly to an input:
 
 ```bash
-aw2724dm-control --help
+aw2724dm-control --set-input 0x11
+aw2724dm-control --display 2 --set-input 0x0f
 ```
 
-Giriş kodları monitörün MCCS capabilities yanıtından alınır. Yaygın değerler
-`0x0f` (DisplayPort 1), `0x10` (DisplayPort 2), `0x11` (HDMI 1) ve `0x12`
-(HDMI 2) olsa da her monitörde aynı olmak zorunda değildir; önce `--list`
-çıktısını kullanın.
+Toggle the pair saved in the GUI:
 
-## GNOME klavye kısayolu
+```bash
+aw2724dm-control --toggle
+```
 
-### Uygulama içinden
-
-1. GUI'de hedef monitörü seçin.
-2. **GNOME Kısayolu Ata…** düğmesine basın.
-3. Geçiş eylemi için kısayolun kullanacağı iki DisplayPort/HDMI girişini seçin;
-   doğrudan geçiş için hedef portu seçin.
-4. Kısayol kutusunu seçip istediğiniz tuş birleşimine basın.
-5. Onaylayın.
-
-Uygulama `org.gnome.settings-daemon.plugins.media-keys` altındaki boş bir custom
-keybinding yolunu bulur, adı/komutu/tuşu yazar ve mevcut kısayolları koruyarak
-listeye ekler.
-
-### GNOME Ayarları üzerinden
-
-**Ayarlar → Klavye → Klavye Kısayollarını Görüntüle ve Özelleştir → Özel
-Kısayollar** yolunda yeni bir kısayol oluşturun. Komut alanına örneğin:
+Toggle an explicit pair of inputs:
 
 ```bash
 aw2724dm-control --display 1 --toggle 0x0f 0x11
 ```
 
-veya:
+Adjust brightness and contrast:
+
+```bash
+aw2724dm-control --brightness 70
+aw2724dm-control --contrast 65
+aw2724dm-control --display 1 --brightness 70 --contrast 65
+```
+
+Show all available options:
+
+```bash
+aw2724dm-control --help
+```
+
+Common MCCS input values include `0x0f` for DisplayPort 1, `0x10` for
+DisplayPort 2, `0x11` for HDMI 1, and `0x12` for HDMI 2. Values vary by monitor;
+always use `--list` to inspect the values reported by your hardware.
+
+## GNOME keyboard shortcuts
+
+### From the application
+
+1. Select the target monitor.
+2. Select **Assign GNOME Shortcut**.
+3. Choose a direct input action or a two-input toggle action.
+4. For a toggle action, select the two DisplayPort/HDMI inputs.
+5. Focus the shortcut field and press the desired key combination.
+6. Confirm the dialog.
+
+The application adds the command under
+`org.gnome.settings-daemon.plugins.media-keys` while preserving existing custom
+shortcuts.
+
+### From GNOME Settings
+
+Open **Settings → Keyboard → View and Customize Shortcuts → Custom Shortcuts**
+and use a command such as:
+
+```bash
+aw2724dm-control --display 1 --toggle 0x0f 0x11
+```
+
+or:
 
 ```bash
 aw2724dm-control --display 1 --set-input 0x11
 ```
 
-yazın. Bu komutlar GUI açık değilken de çalışır.
+These commands work even when the GUI is not running.
 
-## Yapılandırma
+## Secure automatic updates
 
-Kullanıcı ayarları şurada tutulur:
+The application checks the latest stable GitHub Release asynchronously, at most
+once every six hours. Manual checks are available through the **Check for
+Updates** button.
+
+An update is installed only after all of the following checks pass:
+
+1. The Release contains the expected versioned archive, SHA-256 file, and
+   Ed25519 signature.
+2. The archive matches the published SHA-256 digest.
+3. The signature is valid for the public key installed at
+   `/opt/aw2724dm-control/release-public-key.pem`.
+
+The privileged installation step is never started when verification fails.
+
+## Configuration
+
+Settings are stored in:
 
 ```text
 ~/.config/aw2724dm-control/config.json
 ```
 
-Dosya atomik olarak yazılır ve izinleri `0600` yapılır. Monitör numarası,
-port takma adları ve geçiş çiftleri burada saklanır. Uygulama kapalıyken dosyayı
-düzenleyebilirsiniz; geçersiz JSON algılanırsa dosya ezilmeden güvenli
-varsayılanlarla devam edilir.
+The file contains the selected monitor, aliases, toggle pairs, tray behavior,
+and update-check timestamp. It is written atomically with `0600` permissions.
 
-## Sorun giderme
+## Troubleshooting
 
-### `Permission denied` veya monitör bulunamıyor
+### Permission denied or no monitor detected
 
 ```bash
 groups
@@ -236,91 +242,67 @@ ddcutil environment
 ddcutil detect
 ```
 
-Kullanıcı gruplarında `i2c` yoksa oturumu kapatıp açın. Monitör menüsünde DDC/CI
-açık olmalıdır. Bazı dizüstü GPU sürücüleri I²C veri yolunu dışarı açmayabilir.
+Confirm that the user belongs to the `i2c` group and that DDC/CI is enabled in
+the monitor menu. Log out and back in after installation.
 
-### `Feature 0x60` görünmüyor
+### Input Source VCP feature is missing
 
-Monitör DDC/CI üzerinden giriş değiştirmeyi ilan etmiyor olabilir. Ham çıktıyı
-inceleyin:
+Inspect the raw monitor capabilities:
 
 ```bash
 ddcutil capabilities --display 1
 ```
 
-### GUI X11 hatası veriyor
+Some monitors support DDC/CI brightness controls but do not expose input source
+switching through VCP `0x60`.
+
+### The GUI reports an X11 error
 
 ```bash
 echo "$XDG_SESSION_TYPE"
 echo "$DISPLAY"
 ```
 
-İlk komut `x11`, ikinci komut genellikle `:0` veya `:1` döndürmelidir. Wayland
-oturumundan çıkıp giriş ekranında **Ubuntu on Xorg** seçin.
+The first command must return `x11`; the second normally returns `:0` or `:1`.
 
-### Monitör giriş değişiminden sonra kısa süre yanıt vermiyor
+## Tests
 
-Giriş değişince monitör I²C bağlantısını birkaç saniyeliğine kesebilir. Bu
-donanım davranışıdır; birkaç saniye bekleyip yenilemeyi tekrar deneyin.
-
-## Kaldırma
-
-Uygulamayı, masaüstü girdisini ve uygulamaya ait sistem yapılandırmasını kaldırın:
-
-```bash
-./uninstall.sh
-```
-
-Kullanıcı yapılandırmasını da silmek için:
-
-```bash
-./uninstall.sh --purge
-```
-
-Kaldırma betiği `i2c` grubunu ve `apt` paketlerini kaldırmaz; bunlar başka DDC/I²C
-uygulamalarında kullanılıyor olabilir. Kullanıcıyı gruptan çıkarmak isterseniz
-bunu ayrıca ve bilinçli olarak yapın.
-
-## Güvenlik notları
-
-- Donanım komutlarında `shell=True` kullanılmaz; tüm argümanlar ayrı süreç
-  argümanı olarak aktarılır.
-- CLI değerleri aralık denetiminden geçirilir.
-- GUI donanım işlemleri süre aşımıyla çalışır ve hata çıktısını kullanıcıya
-  gösterir.
-- Uygulamanın normal çalışması `sudo` istemez. `sudo` yalnızca kurulum ve
-  kaldırma sırasında sistem dosyaları için kullanılır.
-
-## Geliştirici testleri
-
-Bağımlılıklar kurulmuş bir sanal ortamda donanım gerektirmeyen parser ve GUI
-smoke testlerini çalıştırın:
+Run the hardware-independent parser, updater, and GUI smoke tests:
 
 ```bash
 PYTHONPATH=src QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s tests -v
 ```
 
-## İmzalı sürüm yayımlama
+The repository also runs the test suite on an Ubuntu 26.04 GitHub-hosted runner.
 
-Release workflow’u yalnızca `vMAJOR.MINOR.PATCH` biçimli etiketlerde çalışır.
-Etiket sürümü hem `src/aw2724dm_control/__init__.py` hem de `pyproject.toml`
-içindeki sürümle aynı olmalıdır. İmzalama anahtarı GitHub’da
-`RELEASE_SIGNING_PRIVATE_KEY` Actions secret olarak saklanır; özel anahtar repoya
-eklenmez.
+## Uninstallation
 
-Yeni sürüm için iki sürüm alanını güncelleyin, testleri çalıştırıp `main` dalına
-gönderin ve ardından etiketi yayımlayın:
+Remove the application while preserving user configuration:
 
 ```bash
-git tag -a v1.2.0 -m "AW2724DM Monitor Control 1.2.0"
-git push origin v1.2.0
+./uninstall.sh
 ```
 
-GitHub Actions kaynak arşivini deterministik olarak üretir, SHA-256 dosyasını
-oluşturur, arşivi Ed25519 ile imzalar, imzayı repodaki açık anahtarla yeniden
-doğrular ve üç dosyayı GitHub Release varlığı olarak yayımlar.
+Remove the application and user configuration:
 
-Yerel özel anahtar varsayılan olarak
-`~/.config/aw2724dm-control/signing/release-private.pem` konumunda `0600`
-izinleriyle tutulur. Bu dosyayı güvenli ve çevrimdışı bir konuma yedekleyin;
-repoya, Issue'lara veya Release varlıklarına yüklemeyin.
+```bash
+./uninstall.sh --purge
+```
+
+The `i2c` group and installed Ubuntu packages are intentionally preserved because
+other DDC/I²C applications may use them.
+
+## Security
+
+Do not report vulnerabilities through public Issues. Follow the instructions in
+[SECURITY.md](SECURITY.md) and use GitHub's private vulnerability reporting
+form.
+
+Hardware commands are executed without `shell=True`, CLI values are validated,
+DDC operations use timeouts, GitHub Actions dependencies are pinned to immutable
+commit SHAs, and Release archives are signed before publication.
+
+## License
+
+No license has been selected yet. Unless a license is added, copyright law
+reserves all rights to the repository owner.
