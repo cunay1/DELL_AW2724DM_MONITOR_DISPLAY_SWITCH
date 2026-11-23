@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="/opt/aw2724dm-control"
+DEFAULT_INSTALL_DIR="/opt/aw2724dm-control"
 COMMAND_LINK="/usr/local/bin/aw2724dm-control"
 DESKTOP_FILE="/usr/share/applications/aw2724dm-control.desktop"
 ICON_FILE="/usr/share/icons/hicolor/scalable/apps/aw2724dm-control.svg"
@@ -16,6 +16,37 @@ INSTALL_USER="${SUDO_USER:-${USER}}"
 if ! getent passwd "${INSTALL_USER}" >/dev/null; then
     echo "Kurulum kullanıcısı bulunamadı: ${INSTALL_USER}" >&2
     exit 1
+fi
+
+if [[ -n ${AW2724DM_INSTALL_DIR:-} ]]; then
+    INSTALL_DIR_INPUT="${AW2724DM_INSTALL_DIR}"
+elif [[ -t 0 ]]; then
+    echo
+    echo "Uygulamanın kurulacağı mutlak dizini seçin."
+    read -r -p "Kurulum dizini [${DEFAULT_INSTALL_DIR}]: " INSTALL_DIR_INPUT
+    INSTALL_DIR_INPUT="${INSTALL_DIR_INPUT:-${DEFAULT_INSTALL_DIR}}"
+else
+    INSTALL_DIR_INPUT="${DEFAULT_INSTALL_DIR}"
+fi
+
+if [[ ${INSTALL_DIR_INPUT} != /* || ${INSTALL_DIR_INPUT} == *[$'\001'-$'\037']* ]]; then
+    echo "Kurulum dizini mutlak ve geçerli bir yol olmalıdır: ${INSTALL_DIR_INPUT}" >&2
+    exit 2
+fi
+INSTALL_DIR="$(realpath -m -- "${INSTALL_DIR_INPUT}")"
+case "${INSTALL_DIR}" in
+    /|/opt|/usr|/usr/local|/home|/root|/var|/etc|/bin|/sbin|/lib|/lib32|/lib64|/boot|/dev|/proc|/sys|/run|/tmp|/etc/*|/bin/*|/sbin/*|/lib/*|/lib32/*|/lib64/*|/boot/*|/dev/*|/proc/*|/sys/*|/run/*|/tmp/*)
+        echo "Güvenlik nedeniyle bu geniş dizin kurulum hedefi olarak kullanılamaz: ${INSTALL_DIR}" >&2
+        exit 2
+        ;;
+esac
+if [[ $(dirname -- "${INSTALL_DIR}") == / ]]; then
+    echo "Kurulum hedefi kök dizinin hemen altında olamaz: ${INSTALL_DIR}" >&2
+    exit 2
+fi
+if [[ -L ${INSTALL_DIR} ]]; then
+    echo "Kurulum hedefi sembolik bağlantı olamaz: ${INSTALL_DIR}" >&2
+    exit 2
 fi
 
 APT_QUIET=()
@@ -49,7 +80,7 @@ sudo install -m 0644 "${PROJECT_DIR}/packaging/45-aw2724dm-control-i2c.rules" /e
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=i2c
 
-echo "[3/7] Uygulama /opt altına kopyalanıyor…"
+echo "[3/7] Uygulama ${INSTALL_DIR} altına kopyalanıyor…"
 sudo install -d -m 0755 "${INSTALL_DIR}" "${INSTALL_DIR}/src" "${INSTALL_DIR}/packaging"
 sudo cp -a "${PROJECT_DIR}/src/." "${INSTALL_DIR}/src/"
 sudo install -m 0644 "${PROJECT_DIR}/requirements.txt" "${INSTALL_DIR}/requirements.txt"
@@ -83,6 +114,7 @@ echo "[6/7] Kurulum doğrulanıyor…"
 "${COMMAND_LINK}" --version
 
 echo "[7/7] Kurulum tamamlandı."
+echo "Kurulum dizini: ${INSTALL_DIR}"
 echo
 echo "ÖNEMLİ: i2c grup üyeliğinin etkinleşmesi için GNOME oturumunu kapatıp yeniden açın."
 echo "Uygulama GNOME Wayland ve X11/Xorg oturumlarını destekler."

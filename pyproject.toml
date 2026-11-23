@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aw2724dm-control"
-version = "1.6.0"
+version = "1.7.0"
 description = "GNOME Wayland ve X11 için DDC/CI monitör giriş ve ayar yöneticisi"
 requires-python = ">=3.12"
 dependencies = ["PyQt6==6.12.1"]

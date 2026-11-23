@@ -39,6 +39,7 @@ and does not depend on the display server.
 - Rotating application logs and one-click support-log export
 - In-application version display and About dialog
 - English and Turkish interface selection, with English as the default
+- Theme-aware colored controls for monitor, shortcut, update, and tray actions
 - Ubuntu 26.04 GitHub Actions CI and signed Release workflow
 
 ## Requirements
@@ -76,7 +77,9 @@ The installer:
 2. Enables the `i2c-dev` kernel module.
 3. Creates the `i2c` group if necessary and adds the installing user to it.
 4. Installs an I²C udev permission rule.
-5. Installs the application under `/opt/aw2724dm-control`.
+5. Prompts for an absolute installation directory, defaulting to
+   `/opt/aw2724dm-control`, creates it with safe permissions, and installs the
+   application there. Set `AW2724DM_INSTALL_DIR` for unattended installation.
 6. Creates `/usr/local/bin/aw2724dm-control`.
 7. Installs the desktop entry, icon, update helper, and update verification key.
 
@@ -107,8 +110,8 @@ background worker, keeping the GUI responsive during DDC/CI operations.
 
 ### Language
 
-English is the default interface language. Open **Language / Dil** in the menu
-bar and choose **English** or **Türkçe**. The choice is saved in the per-user
+English is the default interface language. Open **Settings → Language / Dil**
+and choose **🇬🇧 English** or **🇹🇷 Türkçe**. The choice is saved in the per-user
 configuration and the application restarts automatically to apply it to the
 complete interface, CLI messages, update dialogs, and hardware errors.
 
@@ -139,6 +142,12 @@ the application completely.
 
 Ubuntu 26.04 provides AppIndicator support through the
 `gnome-shell-ubuntu-extensions` package, which is installed automatically.
+
+Only one GUI instance can run, preventing duplicate or abandoned tray icons.
+Use **Settings → Keep running in the system tray when the window closes** to
+choose whether the window close button hides the application or exits it. A
+shutdown watchdog records an error and displays a warning if the application
+process is still alive five seconds after a real Quit request.
 
 ## Command-line interface
 
@@ -228,8 +237,8 @@ An update is installed only after all of the following checks pass:
 1. The Release contains the expected versioned archive, SHA-256 file, and
    Ed25519 signature.
 2. The archive matches the published SHA-256 digest.
-3. The signature is valid for the public key installed at
-   `/opt/aw2724dm-control/release-public-key.pem`.
+3. The signature is valid for `release-public-key.pem` in the selected
+   installation directory.
 
 The privileged installation step is never started when verification fails.
 
@@ -237,6 +246,9 @@ During installation, a progress dialog reports administrator authorization,
 download, signature verification, archive extraction, package installation,
 and completion stages. Verbose `apt`, `pip`, and installer output is written to
 the application log instead of being placed in the completion dialog.
+After a successful installation, the application automatically restarts into
+the newly installed version. Updates preserve the installation directory
+selected during the initial installation.
 
 ## Logs and support export
 
@@ -323,7 +335,7 @@ Remove the application while preserving user configuration:
 ./uninstall.sh
 ```
 
-Remove the application and user configuration:
+Remove the application, user configuration, and logs:
 
 ```bash
 ./uninstall.sh --purge

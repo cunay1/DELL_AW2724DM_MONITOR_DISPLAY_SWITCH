@@ -1,2 +1,4 @@
 #!/bin/sh
-exec /opt/aw2724dm-control/venv/bin/python -m aw2724dm_control "$@"
+SCRIPT_PATH="$(readlink -f -- "$0")"
+INSTALL_DIR="$(dirname -- "${SCRIPT_PATH}")"
+exec "${INSTALL_DIR}/venv/bin/python" -m aw2724dm_control "$@"

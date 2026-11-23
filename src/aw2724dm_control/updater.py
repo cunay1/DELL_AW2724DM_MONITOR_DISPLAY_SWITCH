@@ -10,6 +10,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from . import __version__
 from .i18n import tr
@@ -19,7 +20,7 @@ from .logging_config import get_logger
 REPOSITORY = "cunay1/DELL_AW2724DM_MONITOR_DISPLAY_SWITCH"
 RELEASE_API_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 RELEASE_PAGE = f"https://github.com/{REPOSITORY}/releases"
-UPDATE_HELPER = "/opt/aw2724dm-control/aw2724dm-update"
+UPDATE_HELPER = str(Path(__file__).resolve().parents[2] / "aw2724dm-update")
 PROGRESS_PREFIX = "AW2724DM_PROGRESS:"
 logger = get_logger("updater")
 

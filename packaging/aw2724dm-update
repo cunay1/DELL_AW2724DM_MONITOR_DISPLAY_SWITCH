@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 REPOSITORY="cunay1/DELL_AW2724DM_MONITOR_DISPLAY_SWITCH"
-PUBLIC_KEY="/opt/aw2724dm-control/release-public-key.pem"
+INSTALL_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PUBLIC_KEY="${INSTALL_ROOT}/release-public-key.pem"
 
 progress() {
     printf 'AW2724DM_PROGRESS:%s:%s\n' "$1" "$2"
@@ -84,6 +85,7 @@ fi
 
 export SUDO_USER="${CALLING_USER}"
 export USER="${CALLING_USER}"
+export AW2724DM_INSTALL_DIR="${INSTALL_ROOT}"
 progress 65 install
 bash "${SOURCE_DIR}/install.sh"
 progress 98 finish

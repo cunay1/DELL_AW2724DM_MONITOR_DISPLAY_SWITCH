@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from . import __version__
 from .config import ConfigStore
@@ -94,17 +95,49 @@ def run_cli(args: argparse.Namespace, config: ConfigStore, ddc: DDCUtil) -> int:
 
 
 def run_gui(config: ConfigStore, ddc: DDCUtil) -> int:
-    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtCore import QLockFile, QProcess, QStandardPaths
+    from PyQt6.QtWidgets import QApplication, QMessageBox
 
     from .gui import create_window
+    from .styles import apply_application_style
 
     application = QApplication(sys.argv)
     application.setApplicationName("AW2724DM Monitor Control")
     application.setDesktopFileName("aw2724dm-control")
     application.setQuitOnLastWindowClosed(False)
+    apply_application_style(application)
+    runtime_path = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.RuntimeLocation)
+    lock_directory = Path(runtime_path) if runtime_path else Path.home() / ".cache"
+    lock_directory.mkdir(parents=True, exist_ok=True)
+    lock = QLockFile(str(lock_directory / "aw2724dm-control.lock"))
+    if not lock.tryLock(100):
+        if not lock.removeStaleLockFile() or not lock.tryLock(100):
+            logger.warning("A second GUI instance was rejected")
+            QMessageBox.information(
+                None,
+                tr("already_running_title"),
+                tr("already_running"),
+            )
+            return 3
     window = create_window(config, ddc)
     window.show()
-    return application.exec()
+    exit_code = application.exec()
+    restart_requested = application.property("restart_requested") is True
+    lock.unlock()
+    if restart_requested:
+        program = "/usr/local/bin/aw2724dm-control"
+        arguments: list[str] = []
+        if not Path(program).exists():
+            program = sys.executable
+            arguments = ["-m", "aw2724dm_control"]
+        started, process_id = QProcess.startDetached(program, arguments)
+        if started:
+            logger.info("Restarted application as process %s", process_id)
+        else:
+            logger.error("Automatic restart failed: %s %s", program, arguments)
+            QMessageBox.critical(None, tr("operation_error"), tr("restart_failed"))
+            return 4
+    return exit_code
 
 
 def main() -> int:

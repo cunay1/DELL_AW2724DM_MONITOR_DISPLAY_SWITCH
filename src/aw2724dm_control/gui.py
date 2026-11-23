@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import sys
+import json
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -38,7 +41,8 @@ from .config import ConfigStore
 from .ddc import DDCUtil, InputSource, Monitor
 from .gnome import install_shortcut
 from .i18n import get_language, set_language, tr
-from .logging_config import export_logs, get_logger
+from .logging_config import LOG_FILE_NAME, export_logs, get_logger, log_directory
+from .shutdown_monitor import descendant_process_identities, process_start_time
 from .updater import UpdateInfo, apply_update, check_for_update
 from .worker import Worker
 
@@ -120,6 +124,7 @@ class MainWindow(QMainWindow):
         self.busy_count = 0
         self.really_quit = False
         self._updating_aliases = False
+        self.shutdown_started = False
         self.update_progress_dialog: QProgressDialog | None = None
         self.update_worker: Worker | None = None
 
@@ -145,6 +150,7 @@ class MainWindow(QMainWindow):
         self.monitor_combo.setMinimumWidth(400)
         self.monitor_combo.currentIndexChanged.connect(self._monitor_changed)
         self.refresh_button = QPushButton(tr("refresh"))
+        self.refresh_button.setObjectName("secondaryButton")
         self.refresh_button.clicked.connect(self.refresh_monitors)
         top.addWidget(QLabel(tr("monitor")))
         top.addWidget(self.monitor_combo, 1)
@@ -160,6 +166,7 @@ class MainWindow(QMainWindow):
         self.toggle_first = QComboBox()
         self.toggle_second = QComboBox()
         self.toggle_button = QPushButton(tr("toggle_inputs"))
+        self.toggle_button.setObjectName("toggleButton")
         self.toggle_first.currentIndexChanged.connect(self._save_toggle)
         self.toggle_second.currentIndexChanged.connect(self._save_toggle)
         self.toggle_button.clicked.connect(self.toggle_input)
@@ -202,11 +209,15 @@ class MainWindow(QMainWindow):
 
         bottom = QHBoxLayout()
         self.shortcut_button = QPushButton(tr("assign_shortcut"))
+        self.shortcut_button.setObjectName("shortcutButton")
         self.shortcut_button.clicked.connect(self.add_shortcut)
         self.update_button = QPushButton(tr("check_updates"))
+        self.update_button.setObjectName("updateButton")
         self.update_button.clicked.connect(lambda: self.check_updates(manual=True))
         self.hide_button = QPushButton(tr("hide_to_tray"))
-        self.hide_button.clicked.connect(self.hide)
+        self.hide_button.setObjectName("trayButton")
+        self.hide_button.setToolTip(tr("hide_to_tray_tooltip"))
+        self.hide_button.clicked.connect(self.hide_to_tray)
         bottom.addWidget(self.shortcut_button)
         bottom.addWidget(self.update_button)
         bottom.addStretch()
@@ -221,10 +232,18 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(tr("scanning_monitors"))
 
     def _build_menu(self) -> None:
-        language_menu = self.menuBar().addMenu(tr("language_menu"))
+        settings_menu = self.menuBar().addMenu(tr("settings"))
+        self.close_to_tray_action = QAction(tr("close_to_tray"), self, checkable=True)
+        self.close_to_tray_action.setChecked(
+            bool(self.config.data.get("close_to_tray", True))
+        )
+        self.close_to_tray_action.toggled.connect(self.set_close_to_tray)
+        settings_menu.addAction(self.close_to_tray_action)
+        settings_menu.addSeparator()
+        language_menu = settings_menu.addMenu(tr("language_menu"))
         language_group = QActionGroup(self)
         language_group.setExclusive(True)
-        for label, code in (("English", "en"), ("Türkçe", "tr")):
+        for label, code in (("🇬🇧 English", "en"), ("🇹🇷 Türkçe", "tr")):
             action = QAction(label, self, checkable=True)
             action.setChecked(get_language() == code)
             action.triggered.connect(lambda checked, selected=code: self.change_language(selected))
@@ -240,6 +259,11 @@ class MainWindow(QMainWindow):
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
 
+    def set_close_to_tray(self, enabled: bool) -> None:
+        self.config.data["close_to_tray"] = enabled
+        self.config.save()
+        logger.info("Close-to-tray setting changed to %s", enabled)
+
     def change_language(self, language: str) -> None:
         if language == get_language():
             return
@@ -248,15 +272,7 @@ class MainWindow(QMainWindow):
         logger.info("Language changed to %s", language)
         set_language(language)
         QMessageBox.information(self, tr("language_changed_title"), tr("language_changed"))
-        program = "/usr/local/bin/aw2724dm-control"
-        arguments: list[str] = []
-        if not Path(program).exists():
-            import sys
-
-            program = sys.executable
-            arguments = ["-m", "aw2724dm_control"]
-        if QProcess.startDetached(program, arguments)[0]:
-            self.quit_application()
+        self.restart_application()
 
     def show_about(self) -> None:
         QMessageBox.about(
@@ -326,14 +342,66 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
+    def hide_to_tray(self) -> None:
+        logger.info("Window hidden to system tray")
+        self.hide()
+
+    def restart_application(self) -> None:
+        application = QApplication.instance()
+        application.setProperty("restart_requested", True)
+        logger.info("Application restart requested")
+        self.quit_application()
+
+    def _launch_shutdown_monitor(self) -> None:
+        pid = os.getpid()
+        start_time = process_start_time(pid)
+        if start_time is None:
+            logger.error("Could not read process start time for shutdown monitor")
+            return
+        arguments = [
+            "-m",
+            "aw2724dm_control.shutdown_monitor",
+            str(pid),
+            start_time,
+            str(log_directory() / LOG_FILE_NAME),
+            get_language(),
+            json.dumps(descendant_process_identities(pid)),
+        ]
+        started, monitor_pid = QProcess.startDetached(sys.executable, arguments)
+        if started:
+            logger.debug("Shutdown monitor started as process %s", monitor_pid)
+        else:
+            logger.error("Shutdown monitor could not be started")
+
     def quit_application(self) -> None:
+        if self.shutdown_started:
+            return
+        self.shutdown_started = True
+        self.pool.waitForDone(250)
+        active_jobs = self.pool.activeThreadCount()
+        if active_jobs:
+            logger.warning("Shutdown requested with %s background operation(s) active", active_jobs)
+            QMessageBox.warning(
+                self,
+                tr("shutdown_busy_title"),
+                tr("shutdown_busy", count=active_jobs),
+            )
+        self._launch_shutdown_monitor()
         self.really_quit = True
         self.tray.hide()
+        self.tray.setContextMenu(None)
+        self.tray.deleteLater()
+        QApplication.processEvents()
+        logger.info("Application shutdown requested")
         QApplication.instance().quit()
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        if self.really_quit or not self.config.data.get("close_to_tray", True):
+        if self.really_quit:
             event.accept()
+            return
+        if not self.config.data.get("close_to_tray", True):
+            event.accept()
+            QTimer.singleShot(0, self.quit_application)
             return
         event.ignore()
         self.hide()
@@ -426,6 +494,7 @@ class MainWindow(QMainWindow):
             key = f"0x{source.code:02x}"
             text = aliases.get(key, source.name)
             button = QPushButton(f"{text}\n{key}")
+            button.setProperty("inputSource", True)
             button.setMinimumHeight(55)
             button.clicked.connect(partial(self.set_input, source.code))
             self.inputs_layout.addWidget(button, position // 3, position % 3)
@@ -702,7 +771,7 @@ class MainWindow(QMainWindow):
     def _update_applied(self, _result: object) -> None:
         self._close_update_progress()
         QMessageBox.information(self, tr("update_complete"), tr("update_applied"))
-        self.quit_application()
+        QTimer.singleShot(0, self.restart_application)
 
 
 def create_window(config: ConfigStore, ddc: DDCUtil) -> MainWindow:

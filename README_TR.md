@@ -48,11 +48,14 @@ ihtiyaç duymaz.
 │       ├── i18n.py
 │       ├── logging_config.py
 │       ├── main.py
+│       ├── shutdown_monitor.py
+│       ├── styles.py
 │       └── worker.py
 ├── tests
 │   ├── test_ddc.py
 │   ├── test_gui_smoke.py
 │   ├── test_logging.py
+│   ├── test_shutdown_monitor.py
 │   └── test_updater.py
 └── uninstall.sh
 ```
@@ -90,8 +93,10 @@ Kurulum betiği şunları otomatik yapar:
    hemen yükler.
 3. `i2c` grubunu oluşturur, kurulumu başlatan kullanıcıyı bu gruba ekler ve I²C
    aygıtları için grup erişimli udev kuralını kurar.
-4. Uygulamayı `/opt/aw2724dm-control` altına kopyalar ve sanal ortamda Python
-   bağımlılıklarını kurar.
+4. Kullanıcıdan mutlak kurulum dizinini ister; varsayılan olarak
+   `/opt/aw2724dm-control` önerilir. Seçilen dizini güvenli izinlerle oluşturur,
+   uygulamayı buraya kopyalar ve Python sanal ortamını hazırlar. Etkileşimsiz
+   kurulumlarda `AW2724DM_INSTALL_DIR` ortam değişkeni kullanılabilir.
 5. `/usr/local/bin/aw2724dm-control` sembolik bağlantısını, uygulama menüsü
    girdisini ve simgeyi kurar.
 
@@ -121,8 +126,8 @@ dondurmamak için iş parçacığı havuzunda yürütülür.
 
 ### Dil seçimi
 
-Varsayılan arayüz dili İngilizcedir. Menü çubuğundaki **Language / Dil**
-menüsünden **English** veya **Türkçe** seçilebilir. Tercih kullanıcı
+Varsayılan arayüz dili İngilizcedir. **Settings → Language / Dil** menüsünden
+**🇬🇧 English** veya **🇹🇷 Türkçe** seçilebilir. Tercih kullanıcı
 yapılandırmasına kaydedilir ve uygulama; arayüz, CLI mesajları, güncelleme
 pencereleri ve donanım hatalarını yeni dilde göstermek için otomatik yeniden
 başlar.
@@ -136,20 +141,26 @@ başlar.
   `0x12` yazılır.
 - **Port takma adları:** Tablonun son sütununa `Ev Bilgisayarı` gibi bir ad yazın.
   Boş bırakırsanız monitörün bildirdiği ad kullanılır.
-- **Sistem tepsisi:** Pencereyi kapatmak uygulamayı tepsiye gizler. Tepsi
-  menüsünden giriş seçilebilir veya uygulamadan tamamen çıkılabilir.
+- **Sistem tepsisi:** Aynı anda yalnızca tek GUI örneği çalışabilir; böylece
+  yinelenen veya sahipsiz tepsi simgeleri önlenir. **Settings → Pencere kapanınca
+  sistem tepsisinde çalışmaya devam et** seçeneği pencerenin gizlenmesini veya
+  uygulamanın gerçekten kapanmasını belirler. Gerçek bir çıkıştan beş saniye
+  sonra süreç hâlâ yaşıyorsa watchdog log yazar ve uyarı gösterir.
 - **Güncellemeler:** Uygulama açılıştan sonra en son kararlı GitHub Release sürümünü
   asenkron olarak denetler. Denetim en fazla altı saatte bir yapılır. Yeni sürüm
   bulunduğunda kullanıcıdan onay ister. İndirilen sürüm arşivi, SHA-256 özeti ve
-  Ed25519 imzası `/opt/aw2724dm-control/release-public-key.pem` ile doğrulanır;
+  Ed25519 imzası seçilen kurulum dizinindeki `release-public-key.pem` ile doğrulanır;
   doğrulama başarısızsa root kurulumu başlamaz. **Güncellemeleri Denetle** düğmesiyle
   elle denetim de yapılabilir.
 - **Güncelleme ilerlemesi:** Yönetici onayı, indirme, SHA-256/Ed25519
   doğrulaması, arşiv açma ve kurulum aşamaları yüzdelik ilerleme çubuğunda
   gösterilir. Uzun `apt`, `pip` ve kurulum çıktıları sonuç penceresine eklenmez;
-  log dosyasına yazılır.
+  log dosyasına yazılır. Başarılı güncellemeden sonra uygulama yeni sürümle
+  otomatik yeniden başlar ve ilk kurulumda seçilen dizin korunur.
 - **Sürüm ve Hakkında:** Sürüm numarası durum çubuğunda görünür. Ayrıntılar
   için **Yardım → Hakkında** menüsünü veya tepsi menüsünü kullanın.
+- **Renkli arayüz:** Giriş, kısayol, güncelleme ve tepsi eylemleri GNOME'un
+  açık/koyu temasına uyumlu, birbirinden ayırt edilebilir renkler kullanır.
 
 GNOME Shell, geleneksel tepsi simgelerini kendi başına göstermez. Ubuntu 26.04'te
 AppIndicator desteğini sağlayan `gnome-shell-ubuntu-extensions` paketi kurulur.
@@ -313,7 +324,7 @@ Uygulamayı, masaüstü girdisini ve uygulamaya ait sistem yapılandırmasını 
 ./uninstall.sh
 ```
 
-Kullanıcı yapılandırmasını da silmek için:
+Kullanıcı yapılandırmasını ve logları da silmek için:
 
 ```bash
 ./uninstall.sh --purge
@@ -354,8 +365,8 @@ Yeni sürüm için iki sürüm alanını güncelleyin, testleri çalıştırıp 
 gönderin ve ardından etiketi yayımlayın:
 
 ```bash
-git tag -a v1.6.0 -m "AW2724DM Monitor Control 1.6.0"
-git push origin v1.6.0
+git tag -a v1.7.0 -m "AW2724DM Monitor Control 1.7.0"
+git push origin v1.7.0
 ```
 
 GitHub Actions kaynak arşivini deterministik olarak üretir, SHA-256 dosyasını

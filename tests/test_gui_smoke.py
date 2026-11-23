@@ -18,6 +18,7 @@ try:
     from aw2724dm_control.gui import MainWindow, ShortcutDialog, gnome_binding
     from aw2724dm_control.i18n import get_language, set_language, tr
     from aw2724dm_control.main import run_gui
+    from aw2724dm_control.styles import apply_application_style
     from aw2724dm_control import __version__
 
     PYQT_AVAILABLE = True
@@ -68,9 +69,17 @@ class GUISmokeTests(unittest.TestCase):
             self.assertEqual(window.toggle_first.count(), 2)
             self.assertTrue(window.brightness.isEnabled())
             self.assertEqual(window.brightness.value(), 70)
+            self.assertEqual(window.update_button.objectName(), "updateButton")
             window.really_quit = True
             window.tray.hide()
             window.close()
+
+    def test_colored_theme_is_applied(self) -> None:
+        apply_application_style(self.application)
+        stylesheet = self.application.styleSheet()
+        self.assertIn("QPushButton#updateButton", stylesheet)
+        self.assertIn("QMenuBar::item:selected", stylesheet)
+        self.assertIn("QProgressBar::chunk", stylesheet)
 
     def test_shortcut_dialog_allows_selecting_two_inputs(self) -> None:
         inputs = [InputSource(0x0F, "DisplayPort-1"), InputSource(0x11, "HDMI-1")]
@@ -87,6 +96,7 @@ class GUISmokeTests(unittest.TestCase):
             with (
                 patch.dict(os.environ, environment, clear=True),
                 patch("PyQt6.QtWidgets.QApplication") as application_class,
+                patch("aw2724dm_control.styles.apply_application_style"),
                 patch("aw2724dm_control.gui.create_window") as create_window,
             ):
                 application_class.return_value.exec.return_value = 0
@@ -128,13 +138,54 @@ class GUISmokeTests(unittest.TestCase):
             oversized_output = "installer output\n" * 1000
             with (
                 patch("aw2724dm_control.gui.QMessageBox.information") as information,
-                patch.object(window, "quit_application") as quit_application,
+                patch.object(window, "restart_application") as restart_application,
             ):
                 window._update_applied(oversized_output)
+                QTest.qWait(10)
             message = information.call_args.args[2]
             self.assertNotIn("installer output", message)
             self.assertLess(len(message), 300)
+            restart_application.assert_called_once_with()
+            window.really_quit = True
+            window.tray.hide()
+            window.close()
+
+    def test_settings_contains_flagged_language_choices(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            window = MainWindow(ConfigStore(Path(directory) / "config.json"), FakeDDC())
+            settings_action = next(
+                action for action in window.menuBar().actions() if action.text() == "Settings"
+            )
+            language_action = next(
+                action for action in settings_action.menu().actions() if action.menu() is not None
+            )
+            labels = [action.text() for action in language_action.menu().actions()]
+            self.assertIn("🇬🇧 English", labels)
+            self.assertIn("🇹🇷 Türkçe", labels)
+            window.really_quit = True
+            window.tray.hide()
+            window.close()
+
+    def test_close_without_tray_setting_requests_real_shutdown(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = ConfigStore(Path(directory) / "config.json")
+            config.data["close_to_tray"] = False
+            window = MainWindow(config, FakeDDC())
+            with patch.object(window, "quit_application") as quit_application:
+                window.close()
+                QTest.qWait(10)
             quit_application.assert_called_once_with()
+            window.really_quit = True
+            window.tray.hide()
+
+    def test_restart_is_queued_before_quitting(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            window = MainWindow(ConfigStore(Path(directory) / "config.json"), FakeDDC())
+            with patch.object(window, "quit_application") as quit_application:
+                window.restart_application()
+            self.assertIs(QApplication.instance().property("restart_requested"), True)
+            quit_application.assert_called_once_with()
+            QApplication.instance().setProperty("restart_requested", False)
             window.really_quit = True
             window.tray.hide()
             window.close()
