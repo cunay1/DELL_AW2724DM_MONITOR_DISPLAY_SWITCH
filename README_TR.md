@@ -3,12 +3,14 @@
 [English README](README.md)
 
 Dell Alienware AW2724DM ve DDC/CI destekli diğer monitörlerin giriş kaynağını,
-parlaklığını ve kontrastını Ubuntu 26.04 LTS GNOME **X11/Xorg** oturumunda yöneten
-PyQt6 uygulamasıdır. Donanımla `ddcutil` üzerinden konuşur; GUI, CLI, GNOME özel
-klavye kısayolları ve sistem tepsisi birlikte çalışır.
+parlaklığını ve kontrastını Ubuntu 26.04 LTS GNOME ortamında yöneten
+PyQt6 uygulamasıdır. GNOME Wayland ve X11/Xorg oturumlarını destekler. Donanımla
+`ddcutil` üzerinden konuşur; GUI, CLI, GNOME özel klavye kısayolları ve sistem
+tepsisi birlikte çalışır.
 
-Bu sürüm özellikle X11 hedeflidir. GUI, Wayland oturumunda bilinçli olarak başlamaz
-ve Qt `xcb` arka ucunu kullanır. CLI işlemleri grafik oturumuna ihtiyaç duymaz.
+Qt etkin GNOME oturumuna göre yerel Wayland veya `xcb` arka ucunu otomatik seçer.
+DDC/CI iletişimi ekran sunucusundan bağımsızdır. CLI işlemleri grafik oturumuna
+ihtiyaç duymaz.
 
 ## Proje yapısı
 
@@ -54,20 +56,19 @@ ve Qt `xcb` arka ucunu kullanır. CLI işlemleri grafik oturumuna ihtiyaç duyma
 
 ## Ön koşullar
 
-- Ubuntu 26.04 LTS ve GNOME Xorg oturumu
+- Ubuntu 26.04 LTS ve GNOME Wayland veya X11/Xorg oturumu
 - DDC/CI destekli bir monitör
 - Monitörün ekran menüsünde DDC/CI seçeneğinin açık olması
 - Kurulum sırasında paket indirmek için internet bağlantısı
 - `sudo` yetkisi
 
-Giriş ekranında kullanıcıyı seçtikten sonra dişli simgesinden **Ubuntu on Xorg**
-oturumunu seçin. Oturum açtıktan sonra doğrulayın:
+Etkin GNOME oturumunu şu komutla görebilirsiniz:
 
 ```bash
 echo "$XDG_SESSION_TYPE"
 ```
 
-Çıktı `x11` olmalıdır.
+Çıktı `wayland` veya `x11` olabilir; ikisi de desteklenir.
 
 ## Tek komutla kurulum
 
@@ -80,8 +81,8 @@ chmod +x install.sh uninstall.sh
 
 Kurulum betiği şunları otomatik yapar:
 
-1. `apt-requirements.txt` içindeki `ddcutil`, I²C ve X11/Qt çalışma zamanı
-   paketlerini kurar.
+1. `apt-requirements.txt` içindeki `ddcutil`, I²C ve Wayland/X11 Qt çalışma
+   zamanı paketlerini kurar.
 2. `/etc/modules-load.d/i2c-dev.conf` dosyasını oluşturur ve `i2c-dev` modülünü
    hemen yükler.
 3. `i2c` grubunu oluşturur, kurulumu başlatan kullanıcıyı bu gruba ekler ve I²C
@@ -133,7 +134,7 @@ dondurmamak için iş parçacığı havuzunda yürütülür.
 
 GNOME Shell, geleneksel tepsi simgelerini kendi başına göstermez. Ubuntu 26.04'te
 AppIndicator desteğini sağlayan `gnome-shell-ubuntu-extensions` paketi kurulur.
-Simge görünmüyorsa Xorg
+Simge görünmüyorsa GNOME
 oturumunu yeniden başlatın ve Uzantılar uygulamasında **AppIndicator and KStatusNotifierItem Support**
 uzantısının etkin olduğunu doğrulayın.
 
@@ -251,15 +252,18 @@ inceleyin:
 ddcutil capabilities --display 1
 ```
 
-### GUI X11 hatası veriyor
+### GUI açılmıyor
 
 ```bash
 echo "$XDG_SESSION_TYPE"
 echo "$DISPLAY"
+echo "$WAYLAND_DISPLAY"
 ```
 
-İlk komut `x11`, ikinci komut genellikle `:0` veya `:1` döndürmelidir. Wayland
-oturumundan çıkıp giriş ekranında **Ubuntu on Xorg** seçin.
+İlk komut `wayland` veya `x11` döndürebilir. Wayland oturumunda
+`WAYLAND_DISPLAY` genellikle `wayland-0`, X11 oturumunda `DISPLAY` genellikle
+`:0` veya `:1` olur. Qt çalışma zamanı hatasını görmek için uygulamayı
+terminalden `aw2724dm-control` komutuyla başlatın.
 
 ### Monitör giriş değişiminden sonra kısa süre yanıt vermiyor
 
@@ -315,8 +319,8 @@ Yeni sürüm için iki sürüm alanını güncelleyin, testleri çalıştırıp 
 gönderin ve ardından etiketi yayımlayın:
 
 ```bash
-git tag -a v1.2.0 -m "AW2724DM Monitor Control 1.2.0"
-git push origin v1.2.0
+git tag -a v1.3.0 -m "AW2724DM Monitor Control 1.3.0"
+git push origin v1.3.0
 ```
 
 GitHub Actions kaynak arşivini deterministik olarak üretir, SHA-256 dosyasını

@@ -1,3 +1,2 @@
 #!/bin/sh
-export QT_QPA_PLATFORM=xcb
 exec /opt/aw2724dm-control/venv/bin/python -m aw2724dm_control "$@"

@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -15,6 +16,7 @@ try:
     from aw2724dm_control.config import ConfigStore
     from aw2724dm_control.ddc import InputSource, Monitor
     from aw2724dm_control.gui import MainWindow, ShortcutDialog, gnome_binding
+    from aw2724dm_control.main import run_gui
 
     PYQT_AVAILABLE = True
 except ImportError:
@@ -71,6 +73,19 @@ class GUISmokeTests(unittest.TestCase):
         self.assertEqual(dialog.second_input.currentData(), 0x11)
         self.assertEqual(gnome_binding(QKeySequence("Ctrl+Alt+M")), "<Ctrl><Alt>m")
         dialog.close()
+
+    def test_gui_startup_accepts_wayland_without_x11_display(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = ConfigStore(Path(directory) / "config.json")
+            environment = {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "wayland-0"}
+            with (
+                patch.dict(os.environ, environment, clear=True),
+                patch("PyQt6.QtWidgets.QApplication") as application_class,
+                patch("aw2724dm_control.gui.create_window") as create_window,
+            ):
+                application_class.return_value.exec.return_value = 0
+                self.assertEqual(run_gui(config, FakeDDC()), 0)
+                create_window.return_value.show.assert_called_once_with()
 
 
 if __name__ == "__main__":

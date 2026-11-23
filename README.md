@@ -3,9 +3,9 @@
 [Türkçe README](README_TR.md)
 
 AW2724DM Monitor Control is a graphical monitor input switcher and display
-settings manager developed for **Ubuntu 26.04 LTS with the GNOME X11/Xorg
-desktop session**. It is designed for the Dell Alienware AW2724DM and other
-monitors that support DDC/CI.
+settings manager developed for **Ubuntu 26.04 LTS with GNOME**. It supports
+both the default GNOME Wayland session and GNOME on X11/Xorg. It is designed
+for the Dell Alienware AW2724DM and other monitors that support DDC/CI.
 
 The application communicates with monitor hardware through `ddcutil`. It can
 detect connected monitors and their supported input sources, switch between
@@ -13,8 +13,9 @@ DisplayPort and HDMI inputs, adjust brightness and contrast, and expose the same
 operations through its GUI, command-line interface, GNOME keyboard shortcuts,
 and system tray menu.
 
-> This application intentionally targets X11/Xorg. The graphical interface does
-> not run in a Wayland session and forces Qt to use the `xcb` backend.
+Qt selects its native Wayland or `xcb` backend automatically for the active
+GNOME session. Monitor communication uses DDC/CI through the kernel I²C devices
+and does not depend on the display server.
 
 ## Features
 
@@ -27,7 +28,7 @@ and system tray menu.
 - Brightness control through VCP `0x10`
 - Contrast control through VCP `0x12`
 - GNOME custom keyboard shortcut creation with `gsettings`
-- X11 system tray integration
+- GNOME system tray/AppIndicator integration on Wayland and X11
 - CLI commands suitable for GNOME keyboard shortcuts and scripts
 - Per-user configuration in `~/.config/aw2724dm-control/config.json`
 - Automatic update checks through GitHub Releases
@@ -37,20 +38,19 @@ and system tray menu.
 ## Requirements
 
 - Ubuntu 26.04 LTS
-- GNOME running in an X11/Xorg session
+- GNOME running in a Wayland or X11/Xorg session
 - A DDC/CI-compatible monitor
 - DDC/CI enabled in the monitor's on-screen menu
 - Internet access during installation
 - `sudo` access for system package and I²C configuration
 
-At the login screen, select your user, open the gear menu, and choose
-**Ubuntu on Xorg**. Verify the session after logging in:
+You can inspect the current GNOME session with:
 
 ```bash
 echo "$XDG_SESSION_TYPE"
 ```
 
-The output must be `x11`.
+Both `wayland` and `x11` are supported.
 
 ## Installation
 
@@ -65,8 +65,8 @@ chmod +x install.sh uninstall.sh
 
 The installer:
 
-1. Installs `ddcutil`, I²C tools, PyQt6 runtime dependencies, and X11 support
-   packages.
+1. Installs `ddcutil`, I²C tools, and the PyQt6 runtime dependencies for
+   Wayland and X11.
 2. Enables the `i2c-dev` kernel module.
 3. Creates the `i2c` group if necessary and adds the installing user to it.
 4. Installs an I²C udev permission rule.
@@ -77,7 +77,8 @@ The installer:
 ### Important: log out after installation
 
 Group membership changes do not affect the current desktop session. Fully log
-out of GNOME and log back in using **Ubuntu on Xorg**. Reboot if necessary.
+out of GNOME and log back in. Reboot if necessary. You may continue using the
+default Wayland session.
 
 Verify access after starting a new session:
 
@@ -119,7 +120,7 @@ when the slider is released.
 
 ### System tray
 
-Closing the window hides the application in the X11 system tray. Inputs can be
+Closing the window hides the application in the GNOME system tray. Inputs can be
 switched directly from the tray menu. Choose **Quit** from the tray menu to stop
 the application completely.
 
@@ -256,14 +257,18 @@ ddcutil capabilities --display 1
 Some monitors support DDC/CI brightness controls but do not expose input source
 switching through VCP `0x60`.
 
-### The GUI reports an X11 error
+### The GUI does not open
 
 ```bash
 echo "$XDG_SESSION_TYPE"
 echo "$DISPLAY"
+echo "$WAYLAND_DISPLAY"
 ```
 
-The first command must return `x11`; the second normally returns `:0` or `:1`.
+The first command may return `wayland` or `x11`. On Wayland,
+`WAYLAND_DISPLAY` normally contains a value such as `wayland-0`; on X11,
+`DISPLAY` normally contains `:0` or `:1`. Run `aw2724dm-control` in a terminal
+to see any Qt runtime error.
 
 ## Tests
 

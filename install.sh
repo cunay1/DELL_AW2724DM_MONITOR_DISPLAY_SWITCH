@@ -78,5 +78,5 @@ echo "[6/7] Kurulum doğrulanıyor…"
 echo "[7/7] Kurulum tamamlandı."
 echo
 echo "ÖNEMLİ: i2c grup üyeliğinin etkinleşmesi için GNOME oturumunu kapatıp yeniden açın."
-echo "Xorg oturumunda oturum açtığınızdan emin olun (giriş ekranındaki dişli menüsü: Ubuntu on Xorg)."
+echo "Uygulama GNOME Wayland ve X11/Xorg oturumlarını destekler."
 echo "Ardından uygulama menüsünden 'AW2724DM Monitor Control'ı veya terminalden aw2724dm-control komutunu başlatın."

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 
 from . import __version__
@@ -90,11 +89,6 @@ def run_cli(args: argparse.Namespace, config: ConfigStore, ddc: DDCUtil) -> int:
 
 
 def run_gui(config: ConfigStore, ddc: DDCUtil) -> int:
-    session = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    if session == "wayland" or not os.environ.get("DISPLAY"):
-        print("Hata: Grafik arayüzü bir X11/Xorg oturumu ve DISPLAY değişkeni gerektirir.", file=sys.stderr)
-        return 2
-    os.environ["QT_QPA_PLATFORM"] = "xcb"
     from PyQt6.QtWidgets import QApplication
 
     from .gui import create_window
