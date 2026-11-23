@@ -16,6 +16,7 @@ try:
     from aw2724dm_control.config import ConfigStore
     from aw2724dm_control.ddc import InputSource, Monitor
     from aw2724dm_control.gui import MainWindow, ShortcutDialog, gnome_binding
+    from aw2724dm_control.i18n import get_language, set_language, tr
     from aw2724dm_control.main import run_gui
     from aw2724dm_control import __version__
 
@@ -54,9 +55,13 @@ class GUISmokeTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.application = QApplication.instance() or QApplication([])
 
+    def setUp(self) -> None:
+        set_language("en")
+
     def test_window_loads_detected_monitor(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = ConfigStore(Path(directory) / "config.json")
+            self.assertEqual(config.data["language"], "en")
             window = MainWindow(config, FakeDDC())
             QTest.qWait(300)
             self.assertEqual(window.monitor_combo.count(), 1)
@@ -93,8 +98,26 @@ class GUISmokeTests(unittest.TestCase):
             window = MainWindow(ConfigStore(Path(directory) / "config.json"), FakeDDC())
             with patch("aw2724dm_control.gui.QMessageBox.about") as about:
                 window.show_about()
-                self.assertIn(f"Sürüm {__version__}", about.call_args.args[2])
-            self.assertEqual(window.version_label.text(), f"Sürüm {__version__}")
+                self.assertIn(f"Version {__version__}", about.call_args.args[2])
+            self.assertEqual(window.version_label.text(), f"Version {__version__}")
+            window.really_quit = True
+            window.tray.hide()
+            window.close()
+
+    def test_language_choice_is_saved_and_restarts_application(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = ConfigStore(Path(directory) / "config.json")
+            window = MainWindow(config, FakeDDC())
+            with (
+                patch("aw2724dm_control.gui.QMessageBox.information"),
+                patch("aw2724dm_control.gui.QProcess.startDetached", return_value=(True, 1234)),
+                patch.object(window, "quit_application") as quit_application,
+            ):
+                window.change_language("tr")
+            self.assertEqual(get_language(), "tr")
+            self.assertEqual(ConfigStore(config.path).data["language"], "tr")
+            self.assertEqual(tr("refresh"), "Yenile")
+            quit_application.assert_called_once_with()
             window.really_quit = True
             window.tray.hide()
             window.close()

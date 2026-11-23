@@ -4,6 +4,8 @@ import ast
 import re
 import subprocess
 
+from .i18n import tr
+
 
 class GSettingsError(RuntimeError):
     """GNOME gsettings okuma veya yazma hatası."""
@@ -18,7 +20,7 @@ def _run(*args: str) -> str:
     try:
         result = subprocess.run(args, check=False, capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise GSettingsError(f"gsettings çalıştırılamadı: {exc}") from exc
+        raise GSettingsError(tr("gsettings_run_failed", error=exc)) from exc
     if result.returncode != 0:
         raise GSettingsError((result.stderr or result.stdout).strip())
     return result.stdout.strip()
@@ -29,7 +31,7 @@ def install_shortcut(name: str, command: str, binding: str) -> str:
     try:
         current = ast.literal_eval(current_text.replace("@as ", ""))
     except (ValueError, SyntaxError) as exc:
-        raise GSettingsError("Mevcut GNOME kısayol listesi okunamadı.") from exc
+        raise GSettingsError(tr("shortcut_list_failed")) from exc
     if not isinstance(current, list):
         current = []
     used = {int(match.group(1)) for path in current if (match := re.search(r"custom(\d+)/$", path))}

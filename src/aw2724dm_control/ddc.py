@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 
+from .i18n import tr
+
 
 class DDCError(RuntimeError):
     """ddcutil çalıştırma veya çıktı çözümleme hatası."""
@@ -19,7 +21,7 @@ class InputSource:
 @dataclass(slots=True)
 class Monitor:
     display: int
-    model: str = "Bilinmeyen monitör"
+    model: str = ""
     manufacturer: str = ""
     serial: str = ""
     bus: str = ""
@@ -28,10 +30,10 @@ class Monitor:
 
     @property
     def title(self) -> str:
-        details = self.model
+        details = self.model or tr("unknown_monitor")
         if self.connector:
             details += f" — {self.connector}"
-        return f"Ekran {self.display}: {details}"
+        return tr("display_title", display=self.display, details=details)
 
 
 class DDCUtil:
@@ -48,7 +50,7 @@ class DDCUtil:
 
     def ensure_available(self) -> None:
         if shutil.which(self.executable) is None:
-            raise DDCError("ddcutil bulunamadı. Kurulum betiğini çalıştırın.")
+            raise DDCError(tr("ddcutil_missing"))
 
     def run(self, *arguments: str, timeout: int | None = None) -> str:
         self.ensure_available()
@@ -65,12 +67,12 @@ class DDCUtil:
                 env=None,
             )
         except subprocess.TimeoutExpired as exc:
-            raise DDCError(f"ddcutil {timeout or self.timeout} saniye içinde yanıt vermedi.") from exc
+            raise DDCError(tr("ddcutil_timeout", seconds=timeout or self.timeout)) from exc
         except OSError as exc:
-            raise DDCError(f"ddcutil çalıştırılamadı: {exc}") from exc
+            raise DDCError(tr("ddcutil_run_failed", error=exc)) from exc
         if result.returncode != 0:
             message = (result.stderr or result.stdout).strip()
-            raise DDCError(message or f"ddcutil {result.returncode} koduyla sonlandı.")
+            raise DDCError(message or tr("ddcutil_exit", code=result.returncode))
         return result.stdout
 
     @staticmethod
@@ -118,14 +120,14 @@ class DDCUtil:
                 code = int(value.group(1), 16)
                 name = value.group(2).strip()
                 if name.casefold().startswith("unrecognized"):
-                    name = DDCUtil.FALLBACK_INPUT_NAMES.get(code, f"Giriş 0x{code:02x}")
+                    name = DDCUtil.FALLBACK_INPUT_NAMES.get(code, tr("unknown_input", code=code))
                 inputs[code] = name
                 continue
             # Bazı MCCS çıktılarında değerler tek satırda sadece hex olarak verilir.
             if line.lower().startswith("values:"):
                 for token in re.findall(r"(?:0x)?([0-9a-fA-F]{2})\b", line.split(":", 1)[1]):
                     code = int(token, 16)
-                    inputs.setdefault(code, f"Giriş 0x{code:02x}")
+                    inputs.setdefault(code, tr("unknown_input", code=code))
         return [InputSource(code, name) for code, name in sorted(inputs.items())]
 
     @staticmethod
@@ -136,7 +138,7 @@ class DDCUtil:
         match = re.search(r"sl=0x([0-9a-fA-F]+)", output, re.IGNORECASE)
         if match:
             return int(match.group(1), 16)
-        raise DDCError("ddcutil çıktısındaki mevcut değer çözümlenemedi.")
+        raise DDCError(tr("ddc_value_parse"))
 
     def detect(self) -> list[Monitor]:
         monitors = self.parse_detect(self.run("detect", timeout=30))

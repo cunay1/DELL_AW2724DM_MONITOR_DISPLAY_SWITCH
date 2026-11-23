@@ -36,6 +36,7 @@ and does not depend on the display server.
 - Automatic update checks through GitHub Releases
 - SHA-256 and Ed25519 verification before an update is installed
 - In-application version display and About dialog
+- English and Turkish interface selection, with English as the default
 - Ubuntu 26.04 GitHub Actions CI and signed Release workflow
 
 ## Requirements
@@ -101,6 +102,13 @@ aw2724dm-control
 
 The application scans connected monitors and reads their VCP capabilities in a
 background worker, keeping the GUI responsive during DDC/CI operations.
+
+### Language
+
+English is the default interface language. Open **Language / Dil** in the menu
+bar and choose **English** or **Türkçe**. The choice is saved in the per-user
+configuration and the application restarts automatically to apply it to the
+complete interface, CLI messages, update dialogs, and hardware errors.
 
 ### Input source controls
 

@@ -6,41 +6,42 @@ import sys
 from . import __version__
 from .config import ConfigStore
 from .ddc import DDCError, DDCUtil
+from .i18n import set_language, tr
 
 
 def integer(value: str) -> int:
     try:
         return int(value, 0)
     except ValueError as exc:
-        raise argparse.ArgumentTypeError(f"Geçersiz sayı: {value}") from exc
+        raise argparse.ArgumentTypeError(tr("invalid_number", value=value)) from exc
 
 
 def percentage(value: str) -> int:
     parsed = integer(value)
     if not 0 <= parsed <= 100:
-        raise argparse.ArgumentTypeError("Değer 0 ile 100 arasında olmalıdır.")
+        raise argparse.ArgumentTypeError(tr("percentage_range"))
     return parsed
 
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="aw2724dm-control",
-        description="DDC/CI monitör giriş kaynağı ve görüntü ayarı yöneticisi",
+        description=tr("cli_description"),
     )
     result.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    result.add_argument("--display", type=int, help="ddcutil ekran numarası (varsayılan: yapılandırmadaki ekran)")
-    result.add_argument("--list", action="store_true", help="Monitörleri ve giriş kaynaklarını listele")
-    actions = result.add_argument_group("CLI işlemleri")
-    actions.add_argument("--set-input", type=integer, metavar="KOD", help="VCP 0x60 giriş kodunu ayarla")
+    result.add_argument("--display", type=int, help=tr("display_help"))
+    result.add_argument("--list", action="store_true", help=tr("list_help"))
+    actions = result.add_argument_group(tr("cli_actions"))
+    actions.add_argument("--set-input", type=integer, metavar="CODE", help=tr("set_input_help"))
     actions.add_argument(
         "--toggle",
         nargs="*",
         type=integer,
-        metavar="KOD",
-        help="İki giriş arasında geç; isteğe bağlı olarak iki giriş kodu verilebilir",
+        metavar="CODE",
+        help=tr("toggle_help"),
     )
-    actions.add_argument("--brightness", type=percentage, metavar="0-100", help="Parlaklığı ayarla")
-    actions.add_argument("--contrast", type=percentage, metavar="0-100", help="Kontrastı ayarla")
+    actions.add_argument("--brightness", type=percentage, metavar="0-100", help=tr("brightness_help"))
+    actions.add_argument("--contrast", type=percentage, metavar="0-100", help=tr("contrast_help"))
     return result
 
 
@@ -50,7 +51,7 @@ def run_cli(args: argparse.Namespace, config: ConfigStore, ddc: DDCUtil) -> int:
         if args.list:
             monitors = ddc.detect()
             if not monitors:
-                print("DDC/CI monitörü bulunamadı.", file=sys.stderr)
+                print(tr("no_ddc_monitor"), file=sys.stderr)
                 return 1
             for monitor in monitors:
                 print(monitor.title)
@@ -60,30 +61,30 @@ def run_cli(args: argparse.Namespace, config: ConfigStore, ddc: DDCUtil) -> int:
                     print(f"  0x{source.code:02x}  {source.name}{suffix}")
         if args.set_input is not None:
             if not 0 <= args.set_input <= 0xFF:
-                raise DDCError("Giriş kodu 0x00 ile 0xff arasında olmalıdır.")
+                raise DDCError(tr("input_range"))
             ddc.set_input(display, args.set_input)
-            print(f"Ekran {display} girişi 0x{args.set_input:02x} olarak ayarlandı.")
+            print(tr("input_set", display=display, code=args.set_input))
         if args.toggle is not None:
             if len(args.toggle) == 0:
                 pair = config.toggle_inputs(display)
                 if pair is None:
-                    raise DDCError("Geçiş girişleri henüz ayarlanmamış. Önce GUI'den iki giriş seçin.")
+                    raise DDCError(tr("toggle_not_configured"))
             elif len(args.toggle) == 2:
                 pair = int(args.toggle[0]), int(args.toggle[1])
             else:
-                raise DDCError("--toggle sıfır veya tam iki giriş kodu kabul eder.")
+                raise DDCError(tr("toggle_argument_count"))
             if pair[0] == pair[1] or any(code < 0 or code > 0xFF for code in pair):
-                raise DDCError("Geçiş için 0x00–0xff aralığında iki farklı giriş kodu gerekir.")
+                raise DDCError(tr("toggle_pair_invalid"))
             target = ddc.toggle(display, pair[0], pair[1])
-            print(f"Ekran {display} girişi 0x{target:02x} olarak ayarlandı.")
+            print(tr("input_set", display=display, code=target))
         if args.brightness is not None:
             ddc.set_vcp(display, 0x10, args.brightness)
-            print(f"Ekran {display} parlaklığı %{args.brightness} olarak ayarlandı.")
+            print(tr("brightness_set", display=display, value=args.brightness))
         if args.contrast is not None:
             ddc.set_vcp(display, 0x12, args.contrast)
-            print(f"Ekran {display} kontrastı %{args.contrast} olarak ayarlandı.")
+            print(tr("contrast_set", display=display, value=args.contrast))
     except DDCError as exc:
-        print(f"Hata: {exc}", file=sys.stderr)
+        print(tr("error_prefix", message=exc), file=sys.stderr)
         return 1
     return 0
 
@@ -103,8 +104,9 @@ def run_gui(config: ConfigStore, ddc: DDCUtil) -> int:
 
 
 def main() -> int:
-    args = parser().parse_args()
     config = ConfigStore()
+    set_language(config.data.get("language", "en"))
+    args = parser().parse_args()
     ddc = DDCUtil()
     cli_requested = any(
         (

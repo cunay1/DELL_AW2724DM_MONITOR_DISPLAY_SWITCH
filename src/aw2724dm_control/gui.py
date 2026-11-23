@@ -3,8 +3,8 @@ from __future__ import annotations
 from functools import partial
 from pathlib import Path
 
-from PyQt6.QtCore import QThreadPool, QTimer, Qt
-from PyQt6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
+from PyQt6.QtCore import QProcess, QThreadPool, QTimer, Qt
+from PyQt6.QtGui import QAction, QActionGroup, QCloseEvent, QIcon, QKeySequence
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -30,12 +30,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from . import __version__
 from .config import ConfigStore
 from .ddc import DDCUtil, InputSource, Monitor
 from .gnome import install_shortcut
+from .i18n import get_language, set_language, tr
 from .updater import UpdateInfo, apply_update, check_for_update
 from .worker import Worker
-from . import __version__
 
 
 def icon_path() -> Path:
@@ -59,15 +60,15 @@ def gnome_binding(sequence: QKeySequence) -> str:
 class ShortcutDialog(QDialog):
     def __init__(self, inputs: list[InputSource], aliases: dict[str, str], parent: QWidget) -> None:
         super().__init__(parent)
-        self.setWindowTitle("GNOME Kısayolu Ata")
+        self.setWindowTitle(tr("shortcut_title"))
         layout = QFormLayout(self)
-        self.name = QLineEdit("Monitör girişini değiştir")
+        self.name = QLineEdit(tr("shortcut_default_name"))
         self.action = QComboBox()
-        self.action.addItem("İki giriş arasında geçiş", ("toggle", None))
+        self.action.addItem(tr("toggle_action"), ("toggle", None))
         for source in inputs:
             key = f"0x{source.code:02x}"
             label = aliases.get(key, source.name)
-            self.action.addItem(f"Doğrudan: {label} ({key})", ("input", source.code))
+            self.action.addItem(tr("direct_action", label=label, key=key), ("input", source.code))
         self.first_input = QComboBox()
         self.second_input = QComboBox()
         for source in inputs:
@@ -79,12 +80,12 @@ class ShortcutDialog(QDialog):
             self.second_input.setCurrentIndex(1)
         self.key = QKeySequenceEdit(QKeySequence("Ctrl+Alt+M"))
         self.key.setClearButtonEnabled(True)
-        layout.addRow("Ad", self.name)
-        layout.addRow("Eylem", self.action)
-        layout.addRow("Birinci giriş", self.first_input)
-        layout.addRow("İkinci giriş", self.second_input)
-        layout.addRow("Kısayol tuşu", self.key)
-        hint = QLabel("Kutuyu seçip istediğiniz tuş birleşimine basın; örneğin Ctrl+Alt+M veya Super+F8.")
+        layout.addRow(tr("name"), self.name)
+        layout.addRow(tr("action"), self.action)
+        layout.addRow(tr("first_input"), self.first_input)
+        layout.addRow(tr("second_input"), self.second_input)
+        layout.addRow(tr("shortcut_key"), self.key)
+        hint = QLabel(tr("shortcut_hint"))
         hint.setWordWrap(True)
         layout.addRow("", hint)
         buttons = QDialogButtonBox(
@@ -113,7 +114,7 @@ class MainWindow(QMainWindow):
         self.really_quit = False
         self._updating_aliases = False
 
-        self.setWindowTitle("Monitör Giriş Kaynağı ve Ayar Yöneticisi")
+        self.setWindowTitle(tr("window_title"))
         self.setWindowIcon(QIcon(str(icon_path())))
         self.resize(760, 680)
         self.setMinimumSize(650, 560)
@@ -133,22 +134,22 @@ class MainWindow(QMainWindow):
         self.monitor_combo = QComboBox()
         self.monitor_combo.setMinimumWidth(400)
         self.monitor_combo.currentIndexChanged.connect(self._monitor_changed)
-        self.refresh_button = QPushButton("Yenile")
+        self.refresh_button = QPushButton(tr("refresh"))
         self.refresh_button.clicked.connect(self.refresh_monitors)
-        top.addWidget(QLabel("Monitör:"))
+        top.addWidget(QLabel(tr("monitor")))
         top.addWidget(self.monitor_combo, 1)
         top.addWidget(self.refresh_button)
         layout.addLayout(top)
 
-        self.inputs_group = QGroupBox("Giriş kaynakları")
+        self.inputs_group = QGroupBox(tr("input_sources"))
         self.inputs_layout = QGridLayout(self.inputs_group)
         layout.addWidget(self.inputs_group)
 
-        toggle_group = QGroupBox("Hızlı geçiş")
+        toggle_group = QGroupBox(tr("quick_toggle"))
         toggle_layout = QHBoxLayout(toggle_group)
         self.toggle_first = QComboBox()
         self.toggle_second = QComboBox()
-        self.toggle_button = QPushButton("İki Giriş Arasında Geç")
+        self.toggle_button = QPushButton(tr("toggle_inputs"))
         self.toggle_first.currentIndexChanged.connect(self._save_toggle)
         self.toggle_second.currentIndexChanged.connect(self._save_toggle)
         self.toggle_button.clicked.connect(self.toggle_input)
@@ -158,7 +159,7 @@ class MainWindow(QMainWindow):
         toggle_layout.addWidget(self.toggle_button)
         layout.addWidget(toggle_group)
 
-        controls = QGroupBox("Görüntü ayarları")
+        controls = QGroupBox(tr("display_settings"))
         controls_layout = QGridLayout(controls)
         self.brightness = self._make_slider()
         self.contrast = self._make_slider()
@@ -167,34 +168,34 @@ class MainWindow(QMainWindow):
         self.brightness.valueChanged.connect(lambda value: self.brightness_value.setText(str(value)))
         self.contrast.valueChanged.connect(lambda value: self.contrast_value.setText(str(value)))
         self.brightness.sliderReleased.connect(
-            lambda: self.set_control(0x10, self.brightness.value(), "Parlaklık")
+            lambda: self.set_control(0x10, self.brightness.value(), tr("brightness"))
         )
         self.contrast.sliderReleased.connect(
-            lambda: self.set_control(0x12, self.contrast.value(), "Kontrast")
+            lambda: self.set_control(0x12, self.contrast.value(), tr("contrast"))
         )
-        controls_layout.addWidget(QLabel("Parlaklık"), 0, 0)
+        controls_layout.addWidget(QLabel(tr("brightness")), 0, 0)
         controls_layout.addWidget(self.brightness, 0, 1)
         controls_layout.addWidget(self.brightness_value, 0, 2)
-        controls_layout.addWidget(QLabel("Kontrast"), 1, 0)
+        controls_layout.addWidget(QLabel(tr("contrast")), 1, 0)
         controls_layout.addWidget(self.contrast, 1, 1)
         controls_layout.addWidget(self.contrast_value, 1, 2)
         layout.addWidget(controls)
 
-        aliases_group = QGroupBox("Port takma adları")
+        aliases_group = QGroupBox(tr("port_aliases"))
         aliases_layout = QVBoxLayout(aliases_group)
         self.alias_table = QTableWidget(0, 3)
-        self.alias_table.setHorizontalHeaderLabels(["Kod", "Donanım adı", "Takma ad"])
+        self.alias_table.setHorizontalHeaderLabels([tr("code"), tr("hardware_name"), tr("alias")])
         self.alias_table.horizontalHeader().setStretchLastSection(True)
         self.alias_table.itemChanged.connect(self._alias_changed)
         aliases_layout.addWidget(self.alias_table)
         layout.addWidget(aliases_group, 1)
 
         bottom = QHBoxLayout()
-        self.shortcut_button = QPushButton("GNOME Kısayolu Ata…")
+        self.shortcut_button = QPushButton(tr("assign_shortcut"))
         self.shortcut_button.clicked.connect(self.add_shortcut)
-        self.update_button = QPushButton("Güncellemeleri Denetle")
+        self.update_button = QPushButton(tr("check_updates"))
         self.update_button.clicked.connect(lambda: self.check_updates(manual=True))
-        self.hide_button = QPushButton("Sistem Tepsisine Gizle")
+        self.hide_button = QPushButton(tr("hide_to_tray"))
         self.hide_button.clicked.connect(self.hide)
         bottom.addWidget(self.shortcut_button)
         bottom.addWidget(self.update_button)
@@ -204,29 +205,49 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(root)
         self.setStatusBar(QStatusBar())
-        self.version_label = QLabel(f"Sürüm {__version__}")
-        self.version_label.setToolTip("AW2724DM Monitor Control uygulama sürümü")
+        self.version_label = QLabel(tr("version", version=__version__))
+        self.version_label.setToolTip(tr("version_tooltip"))
         self.statusBar().addPermanentWidget(self.version_label)
-        self.statusBar().showMessage("Monitörler aranıyor…")
+        self.statusBar().showMessage(tr("scanning_monitors"))
 
     def _build_menu(self) -> None:
-        help_menu = self.menuBar().addMenu("Yardım")
-        about_action = QAction("Hakkında…", self)
+        language_menu = self.menuBar().addMenu(tr("language_menu"))
+        language_group = QActionGroup(self)
+        language_group.setExclusive(True)
+        for label, code in (("English", "en"), ("Türkçe", "tr")):
+            action = QAction(label, self, checkable=True)
+            action.setChecked(get_language() == code)
+            action.triggered.connect(lambda checked, selected=code: self.change_language(selected))
+            language_group.addAction(action)
+            language_menu.addAction(action)
+
+        help_menu = self.menuBar().addMenu(tr("help"))
+        about_action = QAction(tr("about"), self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
+
+    def change_language(self, language: str) -> None:
+        if language == get_language():
+            return
+        self.config.data["language"] = language
+        self.config.save()
+        set_language(language)
+        QMessageBox.information(self, tr("language_changed_title"), tr("language_changed"))
+        program = "/usr/local/bin/aw2724dm-control"
+        arguments: list[str] = []
+        if not Path(program).exists():
+            import sys
+
+            program = sys.executable
+            arguments = ["-m", "aw2724dm_control"]
+        if QProcess.startDetached(program, arguments)[0]:
+            self.quit_application()
 
     def show_about(self) -> None:
         QMessageBox.about(
             self,
-            "AW2724DM Monitor Control Hakkında",
-            f"<h3>AW2724DM Monitor Control</h3>"
-            f"<p><b>Sürüm {__version__}</b></p>"
-            "<p>Dell Alienware AW2724DM ve DDC/CI destekli diğer monitörler için "
-            "giriş kaynağı, parlaklık ve kontrast yöneticisi.</p>"
-            "<p>Ubuntu 26.04 LTS, GNOME Wayland ve X11/Xorg için geliştirilmiştir. "
-            "Monitör iletişimi <code>ddcutil</code> ile gerçekleştirilir.</p>"
-            '<p><a href="https://github.com/cunay1/DELL_AW2724DM_MONITOR_DISPLAY_SWITCH">'
-            "GitHub proje sayfası</a></p>",
+            tr("about_title"),
+            tr("about_html", version=__version__),
         )
 
     @staticmethod
@@ -240,16 +261,16 @@ class MainWindow(QMainWindow):
         self.tray = QSystemTrayIcon(QIcon(str(icon_path())), self)
         self.tray.setToolTip("AW2724DM Monitor Control")
         self.tray_menu = QMenu()
-        show_action = QAction("Pencereyi Göster", self)
+        show_action = QAction(tr("show_window"), self)
         show_action.triggered.connect(self.show_from_tray)
         self.tray_menu.addAction(show_action)
-        self.tray_inputs_menu = self.tray_menu.addMenu("Giriş Kaynağı")
+        self.tray_inputs_menu = self.tray_menu.addMenu(tr("input_source"))
         self.tray_menu.addSeparator()
-        about_action = QAction("Hakkında…", self)
+        about_action = QAction(tr("about"), self)
         about_action.triggered.connect(self.show_about)
         self.tray_menu.addAction(about_action)
         self.tray_menu.addSeparator()
-        quit_action = QAction("Çıkış", self)
+        quit_action = QAction(tr("quit"), self)
         quit_action.triggered.connect(self.quit_application)
         self.tray_menu.addAction(quit_action)
         self.tray.setContextMenu(self.tray_menu)
@@ -278,15 +299,15 @@ class MainWindow(QMainWindow):
         self.hide()
         self.tray.showMessage(
             "AW2724DM Monitor Control",
-            "Uygulama sistem tepsisinde çalışmaya devam ediyor.",
+            tr("tray_continues"),
             QSystemTrayIcon.MessageIcon.Information,
             2500,
         )
 
-    def _run_async(self, function, *args, success=None, message: str = "İşlem yapılıyor…") -> None:
+    def _run_async(self, function, *args, success=None, message: str | None = None) -> None:
         self.busy_count += 1
         self.refresh_button.setEnabled(False)
-        self.statusBar().showMessage(message)
+        self.statusBar().showMessage(message or tr("working"))
         worker = Worker(function, *args)
         if success is not None:
             worker.signals.succeeded.connect(success)
@@ -298,11 +319,11 @@ class MainWindow(QMainWindow):
         self.busy_count = max(0, self.busy_count - 1)
         if self.busy_count == 0:
             self.refresh_button.setEnabled(True)
-            self.statusBar().showMessage("Hazır", 3000)
+            self.statusBar().showMessage(tr("ready"), 3000)
 
     def _show_error(self, message: str) -> None:
-        self.statusBar().showMessage("Hata", 4000)
-        QMessageBox.critical(self, "İşlem Hatası", message)
+        self.statusBar().showMessage(tr("error"), 4000)
+        QMessageBox.critical(self, tr("operation_error"), message)
 
     def current_monitor(self) -> Monitor | None:
         index = self.monitor_combo.currentIndex()
@@ -312,7 +333,7 @@ class MainWindow(QMainWindow):
         self._run_async(
             self.ddc.detect,
             success=self._monitors_loaded,
-            message="Monitörler ve VCP özellikleri taranıyor…",
+            message=tr("scanning_vcp"),
         )
 
     def _monitors_loaded(self, monitors: object) -> None:
@@ -330,8 +351,8 @@ class MainWindow(QMainWindow):
             self._populate_monitor(None)
             QMessageBox.warning(
                 self,
-                "Monitör Bulunamadı",
-                "ddcutil kullanılabilir bir DDC/CI monitörü algılamadı. Monitör menüsünden DDC/CI özelliğini açın ve i2c grup üyeliğini denetleyin.",
+                tr("monitor_not_found"),
+                tr("monitor_not_found_detail"),
             )
             return
         self._monitor_changed(index)
@@ -357,7 +378,7 @@ class MainWindow(QMainWindow):
         inputs = monitor.inputs if monitor else []
         aliases = self.config.aliases(monitor.display) if monitor else {}
         if not inputs:
-            label = QLabel("VCP 0x60 giriş değerleri algılanamadı.")
+            label = QLabel(tr("inputs_not_detected"))
             self.inputs_layout.addWidget(label, 0, 0)
         for position, source in enumerate(inputs):
             key = f"0x{source.code:02x}"
@@ -437,10 +458,10 @@ class MainWindow(QMainWindow):
             action.triggered.connect(partial(self.set_input, source.code))
         if inputs:
             self.tray_inputs_menu.addSeparator()
-            toggle_action = self.tray_inputs_menu.addAction("İki giriş arasında geç")
+            toggle_action = self.tray_inputs_menu.addAction(tr("toggle_inputs"))
             toggle_action.triggered.connect(self.toggle_input)
         else:
-            action = self.tray_inputs_menu.addAction("Giriş bulunamadı")
+            action = self.tray_inputs_menu.addAction(tr("no_input"))
             action.setEnabled(False)
 
     def _load_controls(self, display: int) -> None:
@@ -451,14 +472,14 @@ class MainWindow(QMainWindow):
             display,
             0x10,
             success=lambda value: self._control_loaded(self.brightness, int(value)),
-            message="Parlaklık okunuyor…",
+            message=tr("reading_brightness"),
         )
         self._run_async(
             self.ddc.get_vcp,
             display,
             0x12,
             success=lambda value: self._control_loaded(self.contrast, int(value)),
-            message="Kontrast okunuyor…",
+            message=tr("reading_contrast"),
         )
 
     @staticmethod
@@ -473,8 +494,10 @@ class MainWindow(QMainWindow):
                 self.ddc.set_input,
                 monitor.display,
                 code,
-                success=lambda _: self.tray.showMessage("Monitör girişi değiştirildi", f"Yeni giriş: 0x{code:02x}"),
-                message=f"Giriş 0x{code:02x} olarak ayarlanıyor…",
+                success=lambda _: self.tray.showMessage(
+                    tr("input_changed"), tr("new_input", code=code)
+                ),
+                message=tr("setting_input", code=code),
             )
 
     def toggle_input(self) -> None:
@@ -484,7 +507,7 @@ class MainWindow(QMainWindow):
         if not monitor or first is None or second is None:
             return
         if first == second:
-            QMessageBox.warning(self, "Geçersiz Seçim", "Geçiş için iki farklı giriş seçin.")
+            QMessageBox.warning(self, tr("invalid_selection"), tr("choose_two_inputs"))
             return
         self._run_async(
             self.ddc.toggle,
@@ -492,9 +515,9 @@ class MainWindow(QMainWindow):
             int(first),
             int(second),
             success=lambda code: self.tray.showMessage(
-                "Monitör girişi değiştirildi", f"Yeni giriş: 0x{int(code):02x}"
+                tr("input_changed"), tr("new_input", code=int(code))
             ),
-            message="Giriş kaynağı değiştiriliyor…",
+            message=tr("switching_input"),
         )
 
     def set_control(self, feature: int, value: int, name: str) -> None:
@@ -505,7 +528,7 @@ class MainWindow(QMainWindow):
                 monitor.display,
                 feature,
                 value,
-                message=f"{name} %{value} olarak ayarlanıyor…",
+                message=tr("setting_control", name=name, value=value),
             )
 
     def add_shortcut(self) -> None:
@@ -517,13 +540,13 @@ class MainWindow(QMainWindow):
             return
         binding = gnome_binding(dialog.key.keySequence())
         if not binding:
-            QMessageBox.warning(self, "Geçersiz Kısayol", "Tek bir geçerli klavye kısayolu girin.")
+            QMessageBox.warning(self, tr("invalid_shortcut"), tr("invalid_shortcut_detail"))
             return
         action, code = dialog.action.currentData()
         first = dialog.first_input.currentData()
         second = dialog.second_input.currentData()
         if action == "toggle" and (first is None or second is None or first == second):
-            QMessageBox.warning(self, "Geçersiz Seçim", "Kısayol için iki farklı monitör girişi seçin.")
+            QMessageBox.warning(self, tr("invalid_selection"), tr("shortcut_choose_two"))
             return
         command = (
             f"aw2724dm-control --display {monitor.display} "
@@ -532,11 +555,13 @@ class MainWindow(QMainWindow):
         if action == "input":
             command = f"aw2724dm-control --display {monitor.display} --set-input 0x{int(code):02x}"
         try:
-            path = install_shortcut(dialog.name.text().strip() or "Monitör kontrolü", command, binding)
+            path = install_shortcut(dialog.name.text().strip() or tr("monitor_control"), command, binding)
         except Exception as exc:
             self._show_error(str(exc))
             return
-        QMessageBox.information(self, "Kısayol Eklendi", f"GNOME kısayolu oluşturuldu:\n{path}")
+        QMessageBox.information(
+            self, tr("shortcut_added"), tr("shortcut_created", path=path)
+        )
 
     def _automatic_update_check(self) -> None:
         import time
@@ -550,7 +575,7 @@ class MainWindow(QMainWindow):
     def check_updates(self, manual: bool = False) -> None:
         self.update_button.setEnabled(False)
         if manual:
-            self.statusBar().showMessage("GitHub üzerinde güncelleme denetleniyor…")
+            self.statusBar().showMessage(tr("checking_updates"))
         worker = Worker(check_for_update)
         worker.signals.succeeded.connect(lambda info: self._update_check_finished(info, manual))
         if manual:
@@ -561,7 +586,7 @@ class MainWindow(QMainWindow):
     def _update_check_finished(self, result: object, manual: bool) -> None:
         import time
 
-        self.statusBar().showMessage("Güncelleme denetimi tamamlandı", 3000)
+        self.statusBar().showMessage(tr("update_check_complete"), 3000)
         self.config.data["last_update_check"] = int(time.time())
         self.config.save()
         info = result if isinstance(result, UpdateInfo) else None
@@ -569,16 +594,18 @@ class MainWindow(QMainWindow):
             if manual:
                 QMessageBox.information(
                     self,
-                    "Güncelleme Yok",
-                    "AW2724DM Monitor Control'ın en güncel sürümünü kullanıyorsunuz.",
+                    tr("no_update"),
+                    tr("latest_version"),
                 )
             return
         answer = QMessageBox.question(
             self,
-            "Güncelleme Bulundu",
-            f"Yeni sürüm kullanılabilir: {info.available_version}\n"
-            f"Mevcut sürüm: {info.current_version}\n\n"
-            "Güncelleme şimdi indirilsin ve kurulsun mu? Yönetici onayı istenecektir.",
+            tr("update_found"),
+            tr(
+                "update_question",
+                available=info.available_version,
+                current=info.current_version,
+            ),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
@@ -587,15 +614,15 @@ class MainWindow(QMainWindow):
                 apply_update,
                 info.available_version,
                 success=self._update_applied,
-                message="Güncelleme indiriliyor ve uygulanıyor…",
+                message=tr("installing_update"),
             )
 
     def _update_applied(self, result: object) -> None:
         details = str(result).strip()
-        message = "Güncelleme başarıyla uygulandı. Uygulama şimdi kapanacak; yeniden başlatın."
+        message = tr("update_applied")
         if details:
             message += f"\n\n{details}"
-        QMessageBox.information(self, "Güncelleme Tamamlandı", message)
+        QMessageBox.information(self, tr("update_complete"), message)
         self.quit_application()
 
 

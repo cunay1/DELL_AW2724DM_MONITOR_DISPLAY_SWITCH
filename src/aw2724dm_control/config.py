@@ -8,6 +8,8 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
+from .i18n import normalize_language
+
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "selected_display": 1,
@@ -16,6 +18,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "close_to_tray": True,
     "check_updates": True,
     "last_update_check": 0,
+    "language": "en",
 }
 
 
@@ -53,6 +56,7 @@ class ConfigStore:
             self.data["toggle_inputs"] = {}
         self.data["close_to_tray"] = bool(self.data.get("close_to_tray", True))
         self.data["check_updates"] = bool(self.data.get("check_updates", True))
+        self.data["language"] = normalize_language(self.data.get("language", "en"))
         try:
             self.data["last_update_check"] = max(0, int(self.data.get("last_update_check", 0)))
         except (TypeError, ValueError):

@@ -45,6 +45,7 @@ ihtiyaç duymaz.
 │       ├── ddc.py
 │       ├── gnome.py
 │       ├── gui.py
+│       ├── i18n.py
 │       ├── main.py
 │       └── worker.py
 ├── tests
@@ -115,6 +116,14 @@ aw2724dm-control
 Başlangıçta uygulama `ddcutil detect` ile monitörleri, her monitör için
 `ddcutil capabilities` ile VCP `0x60` giriş değerlerini tarar. İşlemler arayüzü
 dondurmamak için iş parçacığı havuzunda yürütülür.
+
+### Dil seçimi
+
+Varsayılan arayüz dili İngilizcedir. Menü çubuğundaki **Language / Dil**
+menüsünden **English** veya **Türkçe** seçilebilir. Tercih kullanıcı
+yapılandırmasına kaydedilir ve uygulama; arayüz, CLI mesajları, güncelleme
+pencereleri ve donanım hatalarını yeni dilde göstermek için otomatik yeniden
+başlar.
 
 - **Giriş kaynakları:** Algılanan porta tek tıklayarak geçilir.
 - **Tanınmayan giriş adları:** Monitör `0x10` kodunu tanımsız bildirirse
@@ -323,8 +332,8 @@ Yeni sürüm için iki sürüm alanını güncelleyin, testleri çalıştırıp 
 gönderin ve ardından etiketi yayımlayın:
 
 ```bash
-git tag -a v1.4.0 -m "AW2724DM Monitor Control 1.4.0"
-git push origin v1.4.0
+git tag -a v1.5.0 -m "AW2724DM Monitor Control 1.5.0"
+git push origin v1.5.0
 ```
 
 GitHub Actions kaynak arşivini deterministik olarak üretir, SHA-256 dosyasını
