@@ -21,6 +21,8 @@ and does not depend on the display server.
 
 - Automatic monitor discovery using `ddcutil detect`
 - Automatic input-source discovery from VCP feature `0x60`
+- MCCS fallback names for input values reported as unrecognized, including
+  DisplayPort-2 (`0x10`)
 - Support for Dell Alienware AW2724DM and other DDC/CI monitors
 - One-click switching between DisplayPort and HDMI inputs
 - Toggle shortcuts between any two user-selected input ports
@@ -33,6 +35,7 @@ and does not depend on the display server.
 - Per-user configuration in `~/.config/aw2724dm-control/config.json`
 - Automatic update checks through GitHub Releases
 - SHA-256 and Ed25519 verification before an update is installed
+- In-application version display and About dialog
 - Ubuntu 26.04 GitHub Actions CI and signed Release workflow
 
 ## Requirements
@@ -168,8 +171,8 @@ Show all available options:
 aw2724dm-control --help
 ```
 
-Common MCCS input values include `0x0f` for DisplayPort 1, `0x10` for
-DisplayPort 2, `0x11` for HDMI 1, and `0x12` for HDMI 2. Values vary by monitor;
+Common MCCS input values include `0x0f` for DisplayPort-1, `0x10` for
+DisplayPort-2, `0x11` for HDMI-1, and `0x12` for HDMI-2. Values vary by monitor;
 always use `--list` to inspect the values reported by your hardware.
 
 ## GNOME keyboard shortcuts

@@ -117,6 +117,8 @@ Başlangıçta uygulama `ddcutil detect` ile monitörleri, her monitör için
 dondurmamak için iş parçacığı havuzunda yürütülür.
 
 - **Giriş kaynakları:** Algılanan porta tek tıklayarak geçilir.
+- **Tanınmayan giriş adları:** Monitör `0x10` kodunu tanımsız bildirirse
+  uygulama MCCS standardına göre bunu **DisplayPort-2** olarak gösterir.
 - **Hızlı geçiş:** İki farklı giriş seçilir. Seçim hemen yapılandırmaya kaydolur;
   düğme ve `--toggle` aynı çifti kullanır.
 - **Parlaklık / kontrast:** Kaydırıcı bırakıldığında sırasıyla VCP `0x10` ve
@@ -131,6 +133,8 @@ dondurmamak için iş parçacığı havuzunda yürütülür.
   Ed25519 imzası `/opt/aw2724dm-control/release-public-key.pem` ile doğrulanır;
   doğrulama başarısızsa root kurulumu başlamaz. **Güncellemeleri Denetle** düğmesiyle
   elle denetim de yapılabilir.
+- **Sürüm ve Hakkında:** Sürüm numarası durum çubuğunda görünür. Ayrıntılar
+  için **Yardım → Hakkında** menüsünü veya tepsi menüsünü kullanın.
 
 GNOME Shell, geleneksel tepsi simgelerini kendi başına göstermez. Ubuntu 26.04'te
 AppIndicator desteğini sağlayan `gnome-shell-ubuntu-extensions` paketi kurulur.
@@ -319,8 +323,8 @@ Yeni sürüm için iki sürüm alanını güncelleyin, testleri çalıştırıp 
 gönderin ve ardından etiketi yayımlayın:
 
 ```bash
-git tag -a v1.3.0 -m "AW2724DM Monitor Control 1.3.0"
-git push origin v1.3.0
+git tag -a v1.4.0 -m "AW2724DM Monitor Control 1.4.0"
+git push origin v1.4.0
 ```
 
 GitHub Actions kaynak arşivini deterministik olarak üretir, SHA-256 dosyasını

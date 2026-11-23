@@ -35,6 +35,7 @@ from .ddc import DDCUtil, InputSource, Monitor
 from .gnome import install_shortcut
 from .updater import UpdateInfo, apply_update, check_for_update
 from .worker import Worker
+from . import __version__
 
 
 def icon_path() -> Path:
@@ -117,6 +118,7 @@ class MainWindow(QMainWindow):
         self.resize(760, 680)
         self.setMinimumSize(650, 560)
         self._build_ui()
+        self._build_menu()
         self._build_tray()
         self.refresh_monitors()
         QTimer.singleShot(2500, self._automatic_update_check)
@@ -202,7 +204,30 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(root)
         self.setStatusBar(QStatusBar())
+        self.version_label = QLabel(f"Sürüm {__version__}")
+        self.version_label.setToolTip("AW2724DM Monitor Control uygulama sürümü")
+        self.statusBar().addPermanentWidget(self.version_label)
         self.statusBar().showMessage("Monitörler aranıyor…")
+
+    def _build_menu(self) -> None:
+        help_menu = self.menuBar().addMenu("Yardım")
+        about_action = QAction("Hakkında…", self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+
+    def show_about(self) -> None:
+        QMessageBox.about(
+            self,
+            "AW2724DM Monitor Control Hakkında",
+            f"<h3>AW2724DM Monitor Control</h3>"
+            f"<p><b>Sürüm {__version__}</b></p>"
+            "<p>Dell Alienware AW2724DM ve DDC/CI destekli diğer monitörler için "
+            "giriş kaynağı, parlaklık ve kontrast yöneticisi.</p>"
+            "<p>Ubuntu 26.04 LTS, GNOME Wayland ve X11/Xorg için geliştirilmiştir. "
+            "Monitör iletişimi <code>ddcutil</code> ile gerçekleştirilir.</p>"
+            '<p><a href="https://github.com/cunay1/DELL_AW2724DM_MONITOR_DISPLAY_SWITCH">'
+            "GitHub proje sayfası</a></p>",
+        )
 
     @staticmethod
     def _make_slider() -> QSlider:
@@ -219,6 +244,10 @@ class MainWindow(QMainWindow):
         show_action.triggered.connect(self.show_from_tray)
         self.tray_menu.addAction(show_action)
         self.tray_inputs_menu = self.tray_menu.addMenu("Giriş Kaynağı")
+        self.tray_menu.addSeparator()
+        about_action = QAction("Hakkında…", self)
+        about_action.triggered.connect(self.show_about)
+        self.tray_menu.addAction(about_action)
         self.tray_menu.addSeparator()
         quit_action = QAction("Çıkış", self)
         quit_action.triggered.connect(self.quit_application)

@@ -35,6 +35,13 @@ class Monitor:
 
 
 class DDCUtil:
+    FALLBACK_INPUT_NAMES = {
+        0x0F: "DisplayPort-1",
+        0x10: "DisplayPort-2",
+        0x11: "HDMI-1",
+        0x12: "HDMI-2",
+    }
+
     def __init__(self, executable: str = "ddcutil", timeout: int = 20) -> None:
         self.executable = executable
         self.timeout = timeout
@@ -110,6 +117,8 @@ class DDCUtil:
             if value:
                 code = int(value.group(1), 16)
                 name = value.group(2).strip()
+                if name.casefold().startswith("unrecognized"):
+                    name = DDCUtil.FALLBACK_INPUT_NAMES.get(code, f"Giriş 0x{code:02x}")
                 inputs[code] = name
                 continue
             # Bazı MCCS çıktılarında değerler tek satırda sadece hex olarak verilir.

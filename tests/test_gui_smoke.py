@@ -17,6 +17,7 @@ try:
     from aw2724dm_control.ddc import InputSource, Monitor
     from aw2724dm_control.gui import MainWindow, ShortcutDialog, gnome_binding
     from aw2724dm_control.main import run_gui
+    from aw2724dm_control import __version__
 
     PYQT_AVAILABLE = True
 except ImportError:
@@ -86,6 +87,17 @@ class GUISmokeTests(unittest.TestCase):
                 application_class.return_value.exec.return_value = 0
                 self.assertEqual(run_gui(config, FakeDDC()), 0)
                 create_window.return_value.show.assert_called_once_with()
+
+    def test_about_dialog_contains_application_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            window = MainWindow(ConfigStore(Path(directory) / "config.json"), FakeDDC())
+            with patch("aw2724dm_control.gui.QMessageBox.about") as about:
+                window.show_about()
+                self.assertIn(f"Sürüm {__version__}", about.call_args.args[2])
+            self.assertEqual(window.version_label.text(), f"Sürüm {__version__}")
+            window.really_quit = True
+            window.tray.hide()
+            window.close()
 
 
 if __name__ == "__main__":

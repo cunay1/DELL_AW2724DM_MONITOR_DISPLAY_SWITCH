@@ -33,6 +33,15 @@ VCP Features:
    Feature: 62 (Audio speaker volume)
 """
 
+UNRECOGNIZED_DISPLAYPORT_OUTPUT = """
+VCP Features:
+   Feature: 60 (Input Source)
+      Values:
+         0f: DisplayPort-1
+         10: Unrecognized value
+         11: HDMI-1
+"""
+
 
 class DDCParserTests(unittest.TestCase):
     def test_detect_parser_reads_multiple_monitors(self) -> None:
@@ -50,6 +59,11 @@ class DDCParserTests(unittest.TestCase):
             (0x11, "HDMI-1"),
             (0x12, "HDMI-2"),
         ])
+
+    def test_unrecognized_input_10_uses_displayport_2_name(self) -> None:
+        inputs = DDCUtil.parse_inputs(UNRECOGNIZED_DISPLAYPORT_OUTPUT)
+        self.assertEqual(inputs[1].code, 0x10)
+        self.assertEqual(inputs[1].name, "DisplayPort-2")
 
     def test_current_value_supports_decimal_and_hex(self) -> None:
         self.assertEqual(DDCUtil.parse_current_value("current value = 75, max value = 100"), 75)
